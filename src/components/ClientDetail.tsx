@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { db } from '../lib/firebase';
 import { collection, query, where, orderBy, getDocs, addDoc, serverTimestamp, doc, updateDoc } from 'firebase/firestore';
-import { ArrowLeft, Plus, History, Calendar, Package, Zap, StickyNote, Save, CheckCircle2, ChevronDown, ChevronUp } from 'lucide-react';
+import { ArrowLeft, Plus, History, Calendar, Package, Zap, StickyNote, Save, CheckCircle2, ChevronDown, ChevronUp, Stethoscope } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { format } from 'date-fns';
 import { Client, Treatment } from '../types';
@@ -22,6 +22,7 @@ export default function ClientDetail({ userId, client, onBack, onUpdate }: Clien
   const [newTreatment, setNewTreatment] = useState({
     treatmentName: '',
     productUsage: '',
+    doctorName: '',
     date: format(new Date(), 'yyyy-MM-dd'),
     followUpDate: '',
     notes: '',
@@ -73,6 +74,7 @@ export default function ClientDetail({ userId, client, onBack, onUpdate }: Clien
       setNewTreatment({
         treatmentName: '',
         productUsage: '',
+        doctorName: '',
         date: format(new Date(), 'yyyy-MM-dd'),
         followUpDate: '',
         notes: '',
@@ -158,6 +160,26 @@ export default function ClientDetail({ userId, client, onBack, onUpdate }: Clien
             />
           </div>
 
+          <div className="w-full sm:w-auto space-y-1.5">
+            <label className="text-[10px] font-bold text-brand-muted uppercase tracking-widest block ml-1">Select Doctor</label>
+            <div className="flex gap-2">
+              {['Dr. Debahuti Pattnaik', 'Dr. Sweta Sucharita'].map((doc) => (
+                <button
+                  key={doc}
+                  type="button"
+                  onClick={() => setNewTreatment({ ...newTreatment, doctorName: doc })}
+                  className={`px-3 py-2.5 rounded-xl text-[11px] font-bold transition-all border ${
+                    newTreatment.doctorName === doc 
+                      ? 'bg-brand-primary text-white border-brand-primary shadow-sm shadow-brand-primary/20' 
+                      : 'bg-white text-brand-muted border-brand-border hover:border-brand-primary/30'
+                  }`}
+                >
+                  {doc}
+                </button>
+              ))}
+            </div>
+          </div>
+
           <button
             disabled={isLogging}
             type="submit"
@@ -194,6 +216,7 @@ export default function ClientDetail({ userId, client, onBack, onUpdate }: Clien
                 <th className="px-5 sm:px-8 py-3 sm:py-4 text-[10px] font-bold text-brand-muted uppercase tracking-wider border-b border-brand-border">Date</th>
                 <th className="px-5 sm:px-8 py-3 sm:py-4 text-[10px] font-bold text-brand-muted uppercase tracking-wider border-b border-brand-border">Treatment</th>
                 <th className="px-5 sm:px-8 py-3 sm:py-4 text-[10px] font-bold text-brand-muted uppercase tracking-wider border-b border-brand-border">Intensity</th>
+                <th className="px-5 sm:px-8 py-3 sm:py-4 text-[10px] font-bold text-brand-muted uppercase tracking-wider border-b border-brand-border text-right">Doctor</th>
                 <th className="px-5 sm:px-8 py-3 sm:py-4 text-[10px] font-bold text-brand-muted uppercase tracking-wider border-b border-brand-border text-right">Follow-up</th>
               </tr>
             </thead>
@@ -210,6 +233,12 @@ export default function ClientDetail({ userId, client, onBack, onUpdate }: Clien
                   </td>
                   <td className="px-5 sm:px-8 py-3 sm:py-4 text-[11px] sm:text-sm font-medium text-brand-secondary truncate max-w-[120px]">
                     {t.productUsage || '--'}
+                  </td>
+                  <td className="px-5 sm:px-8 py-3 sm:py-4 text-right">
+                    <div className="flex items-center justify-end gap-1.5">
+                      <Stethoscope size={12} className="text-brand-muted" />
+                      <span className="text-[11px] font-bold text-brand-secondary">{t.doctorName || '--'}</span>
+                    </div>
                   </td>
                   <td className="px-5 sm:px-8 py-3 sm:py-4 text-[11px] sm:text-sm font-medium text-brand-muted italic text-right whitespace-nowrap">
                     {t.followUpDate ? format(t.followUpDate instanceof Date ? t.followUpDate : t.followUpDate.toDate(), 'dd-MMM-yy') : '--'}

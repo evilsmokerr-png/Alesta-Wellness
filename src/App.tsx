@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { User } from 'firebase/auth';
-import { Leaf, Users, LayoutDashboard, Bell, Activity, Calendar, ChevronRight, Phone, Zap, StickyNote, CheckCircle2, MapPin } from 'lucide-react';
+import { Leaf, Users, LayoutDashboard, Bell, Activity, Calendar, ChevronRight, Phone, Zap, StickyNote, CheckCircle2, MapPin, Stethoscope } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { db } from './lib/firebase';
 import { collectionGroup, query, where, onSnapshot, orderBy, limit, doc, getDoc, updateDoc } from 'firebase/firestore';
@@ -346,7 +346,7 @@ export default function App() {
                              </div>
 
                              {/* Treatment Details Grid */}
-                             <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 py-2">
+                             <div className="grid grid-cols-1 sm:grid-cols-4 gap-4 py-2">
                                <div className="space-y-1">
                                  <div className="text-[10px] font-bold text-brand-muted uppercase tracking-widest flex items-center gap-1">
                                    <Activity size={10} className="text-brand-primary" />
@@ -360,6 +360,13 @@ export default function App() {
                                    Intensity
                                  </div>
                                  <div className="text-sm font-semibold text-brand-secondary">{item.productUsage || 'Standard'}</div>
+                               </div>
+                               <div className="space-y-1">
+                                 <div className="text-[10px] font-bold text-brand-muted uppercase tracking-widest flex items-center gap-1">
+                                   <Stethoscope size={10} className="text-brand-primary" />
+                                   Doctor
+                                 </div>
+                                 <div className="text-sm font-bold text-brand-secondary truncate">{item.doctorName || '--'}</div>
                                </div>
                                <div className="space-y-1">
                                  <div className="text-[10px] font-bold text-brand-muted uppercase tracking-widest flex items-center gap-1">

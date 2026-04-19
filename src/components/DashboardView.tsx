@@ -1,6 +1,6 @@
 import React from 'react';
 import { motion } from 'motion/react';
-import { Activity, Users, Calendar, TrendingUp, Clock, ChevronRight, Plus, History } from 'lucide-react';
+import { Activity, Users, Calendar, TrendingUp, Clock, ChevronRight, Plus, History, Stethoscope } from 'lucide-react';
 import { format } from 'date-fns';
 
 interface DashboardViewProps {
@@ -96,8 +96,17 @@ export default function DashboardView({ stats, recentTreatments, onNewPatient, o
                       </div>
                       <div className="truncate">
                         <div className="text-sm font-bold text-brand-secondary truncate">{treatment.treatmentName}</div>
-                        <div className="text-[10px] sm:text-[11px] text-brand-muted mt-0.5">
+                        <div className="text-[10px] sm:text-[11px] text-brand-muted mt-0.5 flex items-center gap-2">
                           {format(treatment.date?.toDate ? treatment.date.toDate() : new Date(treatment.date), 'MMM d, h:mm a')}
+                          {treatment.doctorName && (
+                            <>
+                              <span className="text-slate-300">•</span>
+                              <div className="flex items-center gap-1">
+                                <Stethoscope size={10} className="text-brand-primary" />
+                                <span className="font-medium">{treatment.doctorName}</span>
+                              </div>
+                            </>
+                          )}
                         </div>
                       </div>
                     </div>

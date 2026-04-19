@@ -14,6 +14,7 @@ export interface Treatment {
   date: any;
   treatmentName: string;
   productUsage: string;
+  doctorName?: string;
   ownerId: string;
   followUpDate: any;
   notes?: string;
