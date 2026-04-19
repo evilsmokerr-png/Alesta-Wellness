@@ -57,23 +57,23 @@ export default function ClientForm({ userId, client, onClose, onSaved }: ClientF
     <motion.div
       initial={{ opacity: 0 }}
       animate={{ opacity: 1 }}
-      className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/40 backdrop-blur-sm"
+      className="fixed inset-0 z-50 flex items-center justify-center p-0 sm:p-4 bg-slate-900/60 backdrop-blur-sm"
     >
       <motion.div
         initial={{ scale: 0.95, y: 20 }}
         animate={{ scale: 1, y: 0 }}
-        className="bg-white w-full max-w-md rounded-3xl shadow-2xl overflow-hidden"
+        className="bg-white w-full max-w-md sm:rounded-3xl shadow-2xl overflow-hidden min-h-[100dvh] sm:min-h-0 flex flex-col"
       >
-        <div className="p-6 border-b border-brand-border flex items-center justify-between bg-white">
-          <h2 className="text-lg font-bold text-brand-secondary flex items-center gap-2 uppercase tracking-tight">
-            {client ? 'Edit Clinical Record' : 'Register New Patient'}
+        <div className="p-4 sm:p-6 border-b border-brand-border flex items-center justify-between bg-white flex-shrink-0">
+          <h2 className="text-base sm:text-lg font-bold text-brand-secondary flex items-center gap-2 uppercase tracking-tight">
+            {client ? 'Edit Record' : 'Register Patient'}
           </h2>
           <button onClick={onClose} className="p-2 hover:bg-slate-100 rounded-lg transition-colors text-brand-muted">
             <X size={20} />
           </button>
         </div>
 
-        <form onSubmit={handleSubmit} className="p-8 space-y-6">
+        <form onSubmit={handleSubmit} className="p-6 sm:p-8 space-y-5 sm:space-y-6 overflow-y-auto flex-1">
           <div className="space-y-1.5">
             <label className="text-[10px] font-bold uppercase tracking-widest text-brand-muted ml-1">Patient Full Name</label>
             <div className="relative">
@@ -81,7 +81,7 @@ export default function ClientForm({ userId, client, onClose, onSaved }: ClientF
                 required
                 type="text"
                 placeholder="Ex: Sarah Jenkins"
-                className="w-full pl-10 pr-4 py-3 bg-white border border-brand-border rounded-lg focus:ring-2 focus:ring-brand-primary/10 focus:border-brand-primary transition-all outline-none text-sm text-brand-secondary"
+                className="w-full pl-10 pr-4 py-3 bg-white border border-brand-border rounded-xl focus:ring-2 focus:ring-brand-primary/10 focus:border-brand-primary transition-all outline-none text-sm text-brand-secondary"
                 value={formData.name}
                 onChange={(e) => setFormData({ ...formData, name: e.target.value })}
               />
@@ -96,7 +96,7 @@ export default function ClientForm({ userId, client, onClose, onSaved }: ClientF
                 required
                 type="tel"
                 placeholder="+1 (555) 000-0000"
-                className="w-full pl-10 pr-4 py-3 bg-white border border-brand-border rounded-lg focus:ring-2 focus:ring-brand-primary/10 focus:border-brand-primary transition-all outline-none text-sm text-brand-secondary mono"
+                className="w-full pl-10 pr-4 py-3 bg-white border border-brand-border rounded-xl focus:ring-2 focus:ring-brand-primary/10 focus:border-brand-primary transition-all outline-none text-sm text-brand-secondary mono"
                 value={formData.phone}
                 onChange={(e) => setFormData({ ...formData, phone: e.target.value })}
               />
@@ -104,24 +104,26 @@ export default function ClientForm({ userId, client, onClose, onSaved }: ClientF
             </div>
           </div>
 
-          <div className="space-y-1.5">
+          <div className="space-y-1.5 pb-20 sm:pb-0">
             <label className="text-[10px] font-bold uppercase tracking-widest text-brand-muted ml-1">Clinical Address</label>
             <div className="relative">
               <textarea
                 placeholder="Residential/Billing address..."
-                rows={2}
-                className="w-full pl-10 pr-4 py-3 bg-white border border-brand-border rounded-lg focus:ring-2 focus:ring-brand-primary/10 focus:border-brand-primary transition-all outline-none text-sm text-brand-secondary resize-none"
+                rows={3}
+                className="w-full pl-10 pr-4 py-3 bg-white border border-brand-border rounded-xl focus:ring-2 focus:ring-brand-primary/10 focus:border-brand-primary transition-all outline-none text-sm text-brand-secondary resize-none"
                 value={formData.address}
                 onChange={(e) => setFormData({ ...formData, address: e.target.value })}
               />
               <MapPin className="absolute left-3 top-4 text-brand-muted" size={16} />
             </div>
           </div>
+        </form>
 
+        <div className="p-4 sm:p-8 bg-white border-t border-brand-border sm:border-none flex-shrink-0 sticky bottom-0 sm:static">
           <button
             disabled={loading}
-            type="submit"
-            className="w-full py-3.5 bg-brand-primary text-white rounded-lg hover:bg-blue-700 transition-all font-bold shadow-md shadow-brand-primary/10 flex items-center justify-center gap-2 mt-2 disabled:opacity-50"
+            onClick={handleSubmit}
+            className="w-full py-3.5 bg-brand-primary text-white rounded-xl hover:bg-blue-700 transition-all font-bold shadow-lg shadow-brand-primary/20 flex items-center justify-center gap-2 disabled:opacity-50"
           >
             {loading ? (
               <div className="animate-spin rounded-full h-5 w-5 border-b-2 border-white"></div>
@@ -132,7 +134,7 @@ export default function ClientForm({ userId, client, onClose, onSaved }: ClientF
               </>
             )}
           </button>
-        </form>
+        </div>
       </motion.div>
     </motion.div>
   );

@@ -55,6 +55,8 @@ export default function ClientDetail({ userId, client, onBack, onUpdate }: Clien
       const treatmentData = {
         ...newTreatment,
         ownerId: userId,
+        clientName: client.name,
+        clientPhone: client.phone,
         date: new Date(newTreatment.date),
         followUpDate: newTreatment.followUpDate ? new Date(newTreatment.followUpDate) : null,
         createdAt: serverTimestamp(),
@@ -96,24 +98,24 @@ export default function ClientDetail({ userId, client, onBack, onUpdate }: Clien
 
       {/* Client Profile Card */}
       <div className="section-card">
-        <div className="section-title">Client Profile</div>
-        <div className="p-8">
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-8">
+        <div className="section-title">Patient Profile</div>
+        <div className="p-5 sm:p-8">
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6 sm:gap-8">
             <div className="space-y-1">
-              <label className="text-[11px] font-bold text-brand-muted uppercase tracking-wider block">Full Name</label>
-              <span className="text-base font-semibold text-brand-secondary">{client.name}</span>
+              <label className="text-[10px] font-bold text-brand-muted uppercase tracking-wider block">Full Name</label>
+              <span className="text-sm sm:text-base font-bold text-brand-secondary">{client.name}</span>
             </div>
             <div className="space-y-1">
-              <label className="text-[11px] font-bold text-brand-muted uppercase tracking-wider block">Phone Number</label>
-              <span className="mono text-brand-secondary">{client.phone}</span>
+              <label className="text-[10px] font-bold text-brand-muted uppercase tracking-wider block">Phone Number</label>
+              <span className="mono text-xs sm:text-sm text-brand-secondary font-medium">{client.phone}</span>
             </div>
             <div className="space-y-1">
-              <label className="text-[11px] font-bold text-brand-muted uppercase tracking-wider block">Home Address</label>
-              <span className="text-sm font-medium text-brand-secondary">{client.address || 'N/A'}</span>
+              <label className="text-[10px] font-bold text-brand-muted uppercase tracking-wider block">Home Address</label>
+              <span className="text-xs sm:text-sm font-medium text-brand-secondary truncate block">{client.address || 'N/A'}</span>
             </div>
             <div className="space-y-1">
-              <label className="text-[11px] font-bold text-brand-muted uppercase tracking-wider block">Member Since</label>
-              <span className="text-sm font-medium text-brand-secondary">
+              <label className="text-[10px] font-bold text-brand-muted uppercase tracking-wider block">Member Since</label>
+              <span className="text-xs sm:text-sm font-medium text-brand-secondary block">
                 {client.createdAt?.toDate ? format(client.createdAt.toDate(), 'MMM d, yyyy') : 'Recent'}
               </span>
             </div>
@@ -124,33 +126,33 @@ export default function ClientDetail({ userId, client, onBack, onUpdate }: Clien
       {/* New Treatment Form Card */}
       <div className="section-card">
         <div className="section-title">New Treatment Entry</div>
-        <form onSubmit={handleLogTreatment} className="p-8 flex flex-wrap lg:flex-nowrap items-end gap-6">
-          <div className="flex-1 min-w-[200px] space-y-1.5">
-            <label className="text-[11px] font-bold text-brand-muted uppercase tracking-wider block ml-1">Treatment Name</label>
+        <form onSubmit={handleLogTreatment} className="p-5 sm:p-8 space-y-5 sm:space-y-0 sm:flex sm:flex-wrap lg:flex-nowrap items-end gap-4 sm:gap-6">
+          <div className="w-full sm:flex-1 min-w-0 sm:min-w-[200px] space-y-1.5">
+            <label className="text-[10px] font-bold text-brand-muted uppercase tracking-widest block ml-1">Treatment Name</label>
             <input
               required
               type="text"
-              placeholder="e.g. Laser Resurfacing"
-              className="w-full px-4 py-2.5 bg-white border border-brand-border rounded-lg text-sm focus:ring-2 focus:ring-brand-primary/10 focus:border-brand-primary transition-all outline-none"
+              placeholder="Laser Resurfacing"
+              className="w-full px-4 py-2.5 bg-white border border-brand-border rounded-xl text-sm focus:ring-2 focus:ring-brand-primary/10 focus:border-brand-primary transition-all outline-none"
               value={newTreatment.treatmentName}
               onChange={(e) => setNewTreatment({ ...newTreatment, treatmentName: e.target.value })}
             />
           </div>
-          <div className="flex-1 min-w-[200px] space-y-1.5">
-            <label className="text-[11px] font-bold text-brand-muted uppercase tracking-wider block ml-1">Product / Energy Level</label>
+          <div className="w-full sm:flex-1 min-w-0 sm:min-w-[200px] space-y-1.5">
+            <label className="text-[10px] font-bold text-brand-muted uppercase tracking-widest block ml-1">Intensity / Level</label>
             <input
               type="text"
               placeholder="30J / Hydro-Gel"
-              className="w-full px-4 py-2.5 bg-white border border-brand-border rounded-lg text-sm focus:ring-2 focus:ring-brand-primary/10 focus:border-brand-primary transition-all outline-none"
+              className="w-full px-4 py-2.5 bg-white border border-brand-border rounded-xl text-sm focus:ring-2 focus:ring-brand-primary/10 focus:border-brand-primary transition-all outline-none"
               value={newTreatment.productUsage}
               onChange={(e) => setNewTreatment({ ...newTreatment, productUsage: e.target.value })}
             />
           </div>
           <div className="w-full sm:w-auto space-y-1.5">
-            <label className="text-[11px] font-bold text-brand-muted uppercase tracking-wider block ml-1">Follow-up Date</label>
+            <label className="text-[10px] font-bold text-brand-muted uppercase tracking-widest block ml-1">Follow-up</label>
             <input
               type="date"
-              className="w-full px-4 py-2.5 bg-white border border-brand-border rounded-lg text-sm focus:ring-2 focus:ring-brand-primary/10 focus:border-brand-primary transition-all outline-none"
+              className="w-full px-4 py-2.5 bg-white border border-brand-border rounded-xl text-sm focus:ring-2 focus:ring-brand-primary/10 focus:border-brand-primary transition-all outline-none"
               value={newTreatment.followUpDate}
               onChange={(e) => setNewTreatment({ ...newTreatment, followUpDate: e.target.value })}
             />
@@ -158,52 +160,53 @@ export default function ClientDetail({ userId, client, onBack, onUpdate }: Clien
           <button
             disabled={isLogging}
             type="submit"
-            className="btn-professional btn-success h-[42px] px-8"
+            className="w-full sm:w-auto btn-professional btn-success h-[42px] px-8 py-2.5"
           >
-            {isLogging ? 'Saving...' : 'Save Record'}
+            <Save size={18} className="sm:hidden" />
+            <span className="font-bold">{isLogging ? 'Saving...' : 'Save Record'}</span>
           </button>
         </form>
       </div>
 
       {/* History Table Card */}
       <div className="section-card">
-        <div className="section-title flex justify-between items-center">
-          Treatment History
-          <span className="text-[10px] bg-slate-100 px-2 py-0.5 rounded text-brand-muted font-bold tracking-widest">{treatments.length} Records</span>
+        <div className="section-title flex justify-between items-center px-4 sm:px-8">
+          Clinical History
+          <span className="text-[9px] sm:text-[10px] bg-slate-100 px-2 py-0.5 rounded text-brand-muted font-bold tracking-widest uppercase">{treatments.length} Records</span>
         </div>
-        <div className="overflow-x-auto">
-          <table className="w-full text-left border-collapse">
+        <div className="overflow-x-auto scrollbar-hide">
+          <table className="w-full text-left border-collapse min-w-[600px] sm:min-w-0">
             <thead>
               <tr className="bg-slate-50/30">
-                <th className="px-8 py-4 text-[11px] font-bold text-brand-muted uppercase tracking-wider border-b border-brand-border">Date</th>
-                <th className="px-8 py-4 text-[11px] font-bold text-brand-muted uppercase tracking-wider border-b border-brand-border">Treatment</th>
-                <th className="px-8 py-4 text-[11px] font-bold text-brand-muted uppercase tracking-wider border-b border-brand-border">Product/Energy</th>
-                <th className="px-8 py-4 text-[11px] font-bold text-brand-muted uppercase tracking-wider border-b border-brand-border">Follow-up</th>
+                <th className="px-5 sm:px-8 py-3 sm:py-4 text-[10px] font-bold text-brand-muted uppercase tracking-wider border-b border-brand-border">Date</th>
+                <th className="px-5 sm:px-8 py-3 sm:py-4 text-[10px] font-bold text-brand-muted uppercase tracking-wider border-b border-brand-border">Treatment</th>
+                <th className="px-5 sm:px-8 py-3 sm:py-4 text-[10px] font-bold text-brand-muted uppercase tracking-wider border-b border-brand-border">Intensity</th>
+                <th className="px-5 sm:px-8 py-3 sm:py-4 text-[10px] font-bold text-brand-muted uppercase tracking-wider border-b border-brand-border text-right">Follow-up</th>
               </tr>
             </thead>
             <tbody>
               {treatments.map((t) => (
                 <tr key={t.id} className="hover:bg-brand-row-hover transition-colors group">
-                  <td className="px-8 py-4 mono text-brand-muted">
+                  <td className="px-5 sm:px-8 py-3 sm:py-4 mono text-[11px] sm:text-xs text-brand-muted">
                     {format(t.date instanceof Date ? t.date : t.date.toDate(), 'dd-MMM-yyyy')}
                   </td>
-                  <td className="px-8 py-4">
-                    <span className="px-2.5 py-1 bg-blue-50 text-brand-primary text-[11px] font-bold rounded-full group-hover:bg-white transition-colors">
+                  <td className="px-5 sm:px-8 py-3 sm:py-4">
+                    <span className="px-2.5 py-1 bg-blue-50 text-brand-primary text-[10px] sm:text-[11px] font-bold rounded-lg group-hover:bg-white transition-colors block w-fit truncate max-w-[150px]">
                       {t.treatmentName}
                     </span>
                   </td>
-                  <td className="px-8 py-4 text-sm font-medium text-brand-secondary">
+                  <td className="px-5 sm:px-8 py-3 sm:py-4 text-[11px] sm:text-sm font-medium text-brand-secondary truncate max-w-[120px]">
                     {t.productUsage || '--'}
                   </td>
-                  <td className="px-8 py-4 text-sm font-medium text-brand-muted italic">
-                    {t.followUpDate ? format(t.followUpDate instanceof Date ? t.followUpDate : t.followUpDate.toDate(), 'dd-MMM-yyyy') : '--'}
+                  <td className="px-5 sm:px-8 py-3 sm:py-4 text-[11px] sm:text-sm font-medium text-brand-muted italic text-right whitespace-nowrap">
+                    {t.followUpDate ? format(t.followUpDate instanceof Date ? t.followUpDate : t.followUpDate.toDate(), 'dd-MMM-yy') : '--'}
                   </td>
                 </tr>
               ))}
               {treatments.length === 0 && !loading && (
                 <tr>
-                  <td colSpan={4} className="px-8 py-20 text-center text-brand-muted font-medium">
-                    No clinical history recorded for this patient.
+                  <td colSpan={4} className="px-8 py-16 text-center text-brand-muted font-medium">
+                    No clinical history recorded.
                   </td>
                 </tr>
               )}

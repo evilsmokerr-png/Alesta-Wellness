@@ -18,27 +18,27 @@ export default function DashboardView({ stats, recentTreatments, onNewPatient, o
   const today = format(new Date(), 'EEEE, MMMM do');
 
   return (
-    <div className="space-y-8 max-w-7xl mx-auto">
+    <div className="space-y-6 sm:space-y-8 max-w-7xl mx-auto pb-6">
       {/* Welcome Header */}
-      <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
+      <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
         <div>
-          <h2 className="text-2xl font-bold text-brand-secondary tracking-tight">Clinical Overview</h2>
-          <p className="text-brand-muted text-sm mt-1">{today}</p>
+          <h2 className="text-xl sm:text-2xl font-bold text-brand-secondary tracking-tight">Clinical Overview</h2>
+          <p className="text-brand-muted text-xs sm:text-sm mt-1">{today}</p>
         </div>
-        <div className="flex gap-3">
+        <div className="w-full sm:w-auto">
            <button 
              onClick={onNewPatient}
-             className="flex items-center gap-2 px-4 py-2 bg-blue-50 text-brand-primary rounded-lg text-sm font-semibold hover:bg-blue-100 transition-colors border border-blue-100/50"
+             className="w-full sm:w-auto flex items-center justify-center gap-2 px-4 py-2.5 bg-blue-50 text-brand-primary rounded-xl text-sm font-bold hover:bg-blue-100 transition-colors border border-blue-100/50 shadow-sm"
            >
-             <Plus size={16} />
+             <Plus size={18} />
              New Patient
            </button>
         </div>
       </div>
 
       {/* Primary Metrics Grid */}
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-        <div className="bg-white p-6 rounded-2xl border border-brand-border shadow-sm group hover:border-brand-primary/30 transition-all">
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 sm:gap-6">
+        <div className="bg-white p-5 sm:p-6 rounded-2xl border border-brand-border shadow-sm group hover:border-brand-primary/30 transition-all">
           <div className="flex justify-between items-start mb-4">
             <div className="w-10 h-10 bg-blue-50 rounded-xl flex items-center justify-center text-brand-primary">
               <Activity size={20} />
@@ -51,7 +51,7 @@ export default function DashboardView({ stats, recentTreatments, onNewPatient, o
 
         <button 
           onClick={onViewNotifications}
-          className="bg-white p-6 rounded-2xl border border-brand-border shadow-sm group hover:border-brand-primary/30 transition-all text-left"
+          className="bg-white p-5 sm:p-6 rounded-2xl border border-brand-border shadow-sm group hover:border-brand-primary/30 transition-all text-left"
         >
           <div className="flex justify-between items-start mb-4">
             <div className="w-10 h-10 bg-orange-50 rounded-xl flex items-center justify-center text-orange-600 group-hover:bg-orange-100 transition-colors">
@@ -66,15 +66,15 @@ export default function DashboardView({ stats, recentTreatments, onNewPatient, o
         </button>
       </div>
 
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 sm:gap-8">
         {/* Recent Activity Timeline */}
-        <div className="lg:col-span-2 space-y-6">
-          <div className="flex items-center justify-between">
-            <h3 className="text-sm font-bold text-brand-secondary uppercase tracking-wider flex items-center gap-2">
+        <div className="lg:col-span-2 space-y-4 sm:space-y-6">
+          <div className="flex items-center justify-between px-1">
+            <h3 className="text-xs sm:text-sm font-bold text-brand-secondary uppercase tracking-wider flex items-center gap-2">
               <History className="text-brand-primary" size={16} />
               Recent Activity
             </h3>
-            <span className="text-[10px] font-bold text-brand-muted uppercase tracking-widest">Last 10 Sessions</span>
+            <span className="text-[10px] font-bold text-brand-muted uppercase tracking-widest">Recent 10</span>
           </div>
 
           <div className="bg-white rounded-2xl border border-brand-border overflow-hidden shadow-sm">
@@ -87,32 +87,33 @@ export default function DashboardView({ stats, recentTreatments, onNewPatient, o
                     animate={{ opacity: 1, x: 0 }}
                     transition={{ delay: idx * 0.05 }}
                     onClick={() => treatment.parentId && onSelectPatient(treatment.parentId)}
-                    className="p-5 hover:bg-slate-50 transition-colors flex items-center justify-between group cursor-pointer"
+                    className="p-4 sm:p-5 hover:bg-slate-50 transition-colors flex items-center justify-between group cursor-pointer"
                   >
-                    <div className="flex items-center gap-4">
-                      <div className="w-10 h-10 rounded-full bg-slate-50 flex items-center justify-center text-brand-muted border border-slate-100 group-hover:border-brand-primary/20 group-hover:text-brand-primary transition-colors">
-                        <Calendar size={18} />
+                    <div className="flex items-center gap-3 sm:gap-4 overflow-hidden">
+                      <div className="w-9 h-9 sm:w-10 sm:h-10 rounded-full bg-slate-50 flex-shrink-0 flex items-center justify-center text-brand-muted border border-slate-100 group-hover:border-brand-primary/20 group-hover:text-brand-primary transition-colors">
+                        <Calendar size={16} className="sm:hidden" />
+                        <Calendar size={18} className="hidden sm:block" />
                       </div>
-                      <div>
-                        <div className="text-sm font-bold text-brand-secondary">{treatment.treatmentName}</div>
-                        <div className="text-[11px] text-brand-muted mt-0.5 flex items-center gap-2">
-                          <span className="font-medium">{format(treatment.date?.toDate ? treatment.date.toDate() : new Date(treatment.date), 'MMM d, h:mm a')}</span>
+                      <div className="truncate">
+                        <div className="text-sm font-bold text-brand-secondary truncate">{treatment.treatmentName}</div>
+                        <div className="text-[10px] sm:text-[11px] text-brand-muted mt-0.5">
+                          {format(treatment.date?.toDate ? treatment.date.toDate() : new Date(treatment.date), 'MMM d, h:mm a')}
                         </div>
                       </div>
                     </div>
-                    <div className="flex items-center gap-3">
-                       <span className="text-[10px] font-bold text-brand-muted uppercase tracking-wider bg-slate-100 px-2 py-0.5 rounded">Processed</span>
+                    <div className="flex items-center gap-2 sm:gap-3 flex-shrink-0">
+                       <span className="text-[9px] sm:text-[10px] font-bold text-brand-muted uppercase tracking-wider bg-slate-100 px-2 py-0.5 rounded">Log</span>
                     </div>
                   </motion.div>
                 ))}
               </div>
             ) : (
-              <div className="p-12 text-center">
-                <div className="w-16 h-16 bg-slate-50 rounded-full flex items-center justify-center mx-auto mb-4 border border-slate-100">
-                   <Activity size={32} className="text-slate-200" />
+              <div className="p-10 sm:p-12 text-center">
+                <div className="w-14 h-14 sm:w-16 sm:h-16 bg-slate-50 rounded-full flex items-center justify-center mx-auto mb-4 border border-slate-100">
+                   <Activity size={28} className="text-slate-200" />
                 </div>
-                <p className="text-sm font-medium text-brand-muted">No recent treatment activity detected.</p>
-                <p className="text-xs text-brand-muted mt-1">New treatments will appear here in real-time.</p>
+                <p className="text-sm font-medium text-brand-muted">No recent activity detected.</p>
+                <p className="text-[11px] text-brand-muted mt-1">New treatments will appear here.</p>
               </div>
             )}
           </div>

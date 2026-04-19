@@ -57,17 +57,17 @@ export default function ClientDashboard({ userId, onSelectClient, onNewClient }:
   return (
     <div className="space-y-8 max-w-7xl mx-auto">
       <div>
-        <h2 className="text-2xl font-bold text-brand-secondary tracking-tight">Patient Registry</h2>
-        <p className="text-brand-muted text-sm mt-1">Manage and search your comprehensive clinical records.</p>
+        <h2 className="text-xl sm:text-2xl font-bold text-brand-secondary tracking-tight">Patient Registry</h2>
+        <p className="text-brand-muted text-xs sm:text-sm mt-1">Manage and search your comprehensive clinical records.</p>
       </div>
 
-      <div className="flex flex-col md:flex-row gap-6 items-center justify-between">
-        <div className="relative w-full md:max-w-xl group">
+      <div className="flex flex-col sm:flex-row gap-4 sm:gap-6 items-center justify-between">
+        <div className="relative w-full sm:max-w-xl group order-2 sm:order-1">
           <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-brand-muted group-focus-within:text-brand-primary transition-colors" size={16} />
           <input
             type="text"
-            placeholder="Search patient record by name..."
-            className="w-full pl-12 pr-4 py-3 bg-white border border-brand-border rounded-lg text-sm focus:ring-2 focus:ring-brand-primary/10 focus:border-brand-primary transition-all outline-none text-brand-secondary shadow-sm"
+            placeholder="Search record by name..."
+            className="w-full pl-11 pr-4 py-2.5 sm:py-3 bg-white border border-brand-border rounded-xl text-sm focus:ring-2 focus:ring-brand-primary/10 focus:border-brand-primary transition-all outline-none text-brand-secondary shadow-sm"
             value={searchTerm}
             onChange={(e) => setSearchTerm(e.target.value)}
           />
@@ -75,14 +75,14 @@ export default function ClientDashboard({ userId, onSelectClient, onNewClient }:
 
         <button
           onClick={onNewClient}
-          className="btn-professional btn-primary"
+          className="w-full sm:w-auto btn-professional btn-primary order-1 sm:order-2 py-2.5 sm:py-3"
         >
-          <UserPlus size={16} />
-          Register New Patient
+          <UserPlus size={18} />
+          <span className="sm:inline font-bold">Register Patient</span>
         </button>
       </div>
 
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4 sm:gap-6">
         <AnimatePresence mode="popLayout">
           {clients.map((client, index) => (
             <motion.div
@@ -94,27 +94,27 @@ export default function ClientDashboard({ userId, onSelectClient, onNewClient }:
               onClick={() => onSelectClient(client)}
               className="section-card hover:border-brand-primary/40 hover:shadow-md transition-all cursor-pointer group"
             >
-              <div className="section-title flex justify-between items-center py-3">
-                Profile
-                <ChevronRight size={14} className="text-brand-muted group-hover:text-brand-primary transition-colors" />
+              <div className="section-title flex justify-between items-center py-2 px-4 sm:px-5">
+                <span className="text-[10px] font-bold uppercase tracking-widest bg-blue-50 text-brand-primary px-2 py-0.5 rounded">Profile</span>
+                <ChevronRight size={16} className="text-brand-muted group-hover:text-brand-primary transition-colors" />
               </div>
-              <div className="p-6">
-                <h3 className="font-bold text-brand-secondary text-base mb-4 group-hover:text-brand-primary transition-colors">{client.name}</h3>
-                <div className="space-y-3">
+              <div className="p-4 sm:p-6">
+                <h3 className="font-bold text-brand-secondary text-base mb-3 group-hover:text-brand-primary transition-colors truncate">{client.name}</h3>
+                <div className="space-y-2.5">
                   <div className="flex flex-col">
                     <span className="text-[10px] font-bold text-brand-muted uppercase tracking-wider mb-0.5">Contact</span>
-                    <span className="mono text-brand-secondary">{client.phone}</span>
+                    <span className="mono text-xs sm:text-sm text-brand-secondary font-medium">{client.phone}</span>
                   </div>
                   {client.address && (
                     <div className="flex flex-col">
-                      <span className="text-[10px] font-bold text-brand-muted uppercase tracking-wider mb-0.5">Address</span>
-                      <span className="text-xs text-brand-secondary truncate">{client.address}</span>
+                      <span className="text-[10px] font-bold text-brand-muted uppercase tracking-wider mb-0.5">Location</span>
+                      <span className="text-[11px] sm:text-xs text-brand-secondary truncate font-medium">{client.address}</span>
                     </div>
                   )}
-                  <div className="flex flex-col pt-3 border-t border-slate-50">
-                    <span className="text-[10px] font-bold text-brand-muted uppercase tracking-wider mb-0.5">Last Visit</span>
-                    <span className="text-xs font-semibold text-brand-secondary">
-                      {client.updatedAt?.toDate ? format(client.updatedAt.toDate(), 'MMMM d, yyyy') : 'Recent'}
+                  <div className="flex flex-col pt-2.5 border-t border-slate-50">
+                    <span className="text-[10px] font-bold text-brand-muted uppercase tracking-wider mb-0.5">Updated</span>
+                    <span className="text-[11px] sm:text-xs font-bold text-brand-secondary italic">
+                      {client.updatedAt?.toDate ? format(client.updatedAt.toDate(), 'MMM d, yyyy') : 'Recently'}
                     </span>
                   </div>
                 </div>
