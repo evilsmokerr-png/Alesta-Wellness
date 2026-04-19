@@ -405,7 +405,7 @@ export default function App() {
                               
                               <div className="flex gap-2 w-full sm:w-auto">
                                 <a 
-                                  href={`tel:${item.clientPhone}`}
+                                  href={`tel:${item.clientPhone || clientNames[item.parentId!]?.phone}`}
                                   className="flex-1 sm:flex-none flex items-center justify-center gap-2 px-4 py-2 bg-white border border-brand-border rounded-lg text-xs font-bold text-brand-secondary hover:border-brand-primary/30 transition-all shadow-sm"
                                 >
                                   <Phone size={14} />
