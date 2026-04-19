@@ -51,12 +51,22 @@ export default function ClientDetail({ userId, client, onBack, onUpdate }: Clien
 
   const handleLogTreatment = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!newTreatment.treatmentName) return;
+    if (!newTreatment.treatmentName.trim()) {
+      alert("Please enter a treatment name");
+      return;
+    }
+    if (!newTreatment.doctorName) {
+      alert("Please select the doctor who performed the treatment");
+      return;
+    }
 
     setIsLogging(true);
     try {
       const treatmentData = {
         ...newTreatment,
+        treatmentName: newTreatment.treatmentName.trim(),
+        productUsage: newTreatment.productUsage.trim(),
+        notes: newTreatment.notes?.trim(),
         ownerId: userId,
         clientName: client.name,
         clientPhone: client.phone,
@@ -72,7 +82,17 @@ export default function ClientDetail({ userId, client, onBack, onUpdate }: Clien
         updatedAt: serverTimestamp()
       });
 
-      setTreatments([{ id: treatmentRef.id, ...treatmentData } as any, ...treatments]);
+      // For local state update, convert serverTimestamp placeholder to actual date
+      const localTreatment = {
+        id: treatmentRef.id,
+        ...treatmentData,
+        createdAt: new Date(),
+        // Ensure dates are objects for the local list
+        date: treatmentData.date,
+        followUpDate: treatmentData.followUpDate
+      };
+
+      setTreatments([localTreatment as any, ...treatments]);
       setNewTreatment({
         treatmentName: '',
         productUsage: '',
@@ -83,8 +103,10 @@ export default function ClientDetail({ userId, client, onBack, onUpdate }: Clien
       });
       setShowHistory(true);
       onUpdate({ ...client, updatedAt: new Date() } as any);
+      alert("Treatment successfully logged");
     } catch (error) {
       console.error("Error logging treatment:", error);
+      alert("Failed to save treatment record. Please check your connection.");
     } finally {
       setIsLogging(false);
     }
