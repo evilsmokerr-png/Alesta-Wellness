@@ -1,0 +1,44 @@
+{
+  "entities": {
+    "Client": {
+      "title": "Client",
+      "description": "Personal information for a wellness client",
+      "type": "object",
+      "properties": {
+        "name": { "type": "string", "description": "Full name" },
+        "phone": { "type": "string", "description": "Contact phone number" },
+        "address": { "type": "string", "description": "Home address" },
+        "searchName": { "type": "string", "description": "Lowercase name for searching" },
+        "ownerId": { "type": "string", "description": "UID of the user who owns this client record" },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["name", "phone", "searchName", "ownerId"]
+    },
+    "Treatment": {
+      "title": "Treatment",
+      "description": "Details of a specific treatment session",
+      "type": "object",
+      "properties": {
+        "date": { "type": "string", "format": "date-time" },
+        "treatmentName": { "type": "string", "description": "Name of the treatment" },
+        "productUsage": { "type": "string", "description": "Products used or energy level" },
+        "ownerId": { "type": "string", "description": "UID of the user who owns this treatment" },
+        "followUpDate": { "type": "string", "format": "date-time" },
+        "notes": { "type": "string" },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["date", "treatmentName", "ownerId", "createdAt"]
+    }
+  },
+  "firestore": {
+    "/clients/{clientId}": {
+      "schema": "Client",
+      "description": "Collection of clients"
+    },
+    "/clients/{clientId}/treatments/{treatmentId}": {
+      "schema": "Treatment",
+      "description": "Subcollection of treatments for a specific client"
+    }
+  }
+}

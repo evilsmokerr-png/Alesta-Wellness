@@ -1,0 +1,103 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    
+    // Default deny
+    match /{document=**} {
+      allow read, write: if false;
+    }
+
+    // --- Helpers ---
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    function isOwner(data) {
+      return isSignedIn() && data.ownerId == request.auth.uid;
+    }
+
+    function isValidId(id) {
+      return id is string && id.size() <= 128 && id.matches('^[a-zA-Z0-9_\\-]+$');
+    }
+
+    function incoming() {
+      return request.resource.data;
+    }
+
+    function existing() {
+      return resource.data;
+    }
+
+    // --- Validation Blueprints ---
+
+    function isValidClient(data, isCreate) {
+      return data.keys().hasAll(['name', 'phone', 'searchName', 'ownerId', 'createdAt', 'updatedAt'])
+        && (data.keys().size() == 6 || (data.keys().size() == 7 && data.keys().hasAll(['address'])))
+        && data.name is string && data.name.size() > 0 && data.name.size() <= 200
+        && data.phone is string && data.phone.size() >= 5 && data.phone.size() <= 20
+        && data.searchName is string && data.searchName.size() <= 210
+        && data.ownerId == request.auth.uid
+        && (data.address == null || (data.address is string && data.address.size() <= 500))
+        && (isCreate ? data.createdAt == request.time : data.createdAt == existing().createdAt)
+        && data.updatedAt == request.time;
+    }
+
+    function isValidTreatment(data) {
+      return data.keys().hasAll(['date', 'treatmentName', 'productUsage', 'followUpDate', 'createdAt', 'ownerId'])
+        && (data.keys().size() >= 6 && data.keys().size() <= 7)
+        && data.treatmentName is string && data.treatmentName.size() <= 200
+        && data.productUsage is string && data.productUsage.size() <= 1000
+        && data.ownerId == request.auth.uid
+        && data.createdAt == request.time;
+    }
+
+    // --- Routes ---
+
+    // Collection Group for cross-patient clinical stats
+    match /{path=**}/treatments/{treatmentId} {
+      allow list: if isSignedIn() && resource.data.ownerId == request.auth.uid;
+    }
+
+    match /clients/{clientId} {
+      allow get: if isOwner(existing()) && isValidId(clientId);
+      allow list: if isSignedIn() && resource.data.ownerId == request.auth.uid;
+      
+      allow create: if isSignedIn() && isValidId(clientId) && isValidClient(incoming(), true);
+      
+      allow update: if isOwner(existing()) 
+        && isValidId(clientId)
+        && isValidClient(incoming(), false)
+        && (
+          // Full update - only allow these fields to change
+          (incoming().diff(existing()).affectedKeys().hasOnly(['name', 'phone', 'address', 'searchName', 'updatedAt']))
+        );
+
+      allow delete: if isOwner(existing());
+
+      match /treatments/{treatmentId} {
+        // Master Gate for single documents (get, create, etc.)
+        function isParentOwner() {
+          return get(/databases/$(database)/documents/clients/$(clientId)).data.ownerId == request.auth.uid;
+        }
+
+        // List security: evaluate resource.data directly (Query Enforcer) - No get() inside list
+        allow list: if isSignedIn() && resource.data.ownerId == request.auth.uid;
+
+        allow get: if isSignedIn() && isParentOwner() && isValidId(treatmentId);
+        
+        allow create: if isSignedIn() 
+          && isValidId(treatmentId) 
+          && isParentOwner() 
+          && isValidTreatment(incoming());
+          
+        allow update: if isSignedIn() 
+          && isValidId(treatmentId) 
+          && isParentOwner() 
+          && isValidTreatment(incoming()) 
+          && incoming().ownerId == existing().ownerId;
+
+        allow delete: if isSignedIn() && isParentOwner();
+      }
+    }
+  }
+}
