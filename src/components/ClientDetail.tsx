@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { db } from '../lib/firebase';
-import { collection, query, where, orderBy, getDocs, addDoc, serverTimestamp, doc, updateDoc } from 'firebase/firestore';
-import { ArrowLeft, Plus, History, Calendar, Package, Zap, StickyNote, Save, CheckCircle2, ChevronDown, ChevronUp, Stethoscope } from 'lucide-react';
+import { collection, query, where, orderBy, getDocs, addDoc, serverTimestamp, doc, updateDoc, deleteDoc } from 'firebase/firestore';
+import { ArrowLeft, Plus, History, Calendar, Package, Zap, StickyNote, Save, CheckCircle2, ChevronDown, ChevronUp, Stethoscope, Trash2, AlertCircle } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { format } from 'date-fns';
 import { Client, Treatment } from '../types';
@@ -18,6 +18,8 @@ export default function ClientDetail({ userId, client, onBack, onUpdate }: Clien
   const [loading, setLoading] = useState(true);
   const [showHistory, setShowHistory] = useState(false);
   const [isLogging, setIsLogging] = useState(false);
+  const [isDeleting, setIsDeleting] = useState(false);
+  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
 
   const [newTreatment, setNewTreatment] = useState({
     treatmentName: '',
@@ -88,15 +90,63 @@ export default function ClientDetail({ userId, client, onBack, onUpdate }: Clien
     }
   };
 
+  const handleDeleteClient = async () => {
+    if (!client.id) return;
+    setIsDeleting(true);
+    try {
+      await deleteDoc(doc(db, 'clients', client.id));
+      onBack();
+    } catch (error) {
+      console.error("Error deleting client:", error);
+      alert("Failed to delete patient record. Please try again.");
+    } finally {
+      setIsDeleting(false);
+    }
+  };
+
   return (
     <div className="space-y-6">
-      <button 
-        onClick={onBack}
-        className="flex items-center gap-2 text-brand-muted hover:text-brand-primary transition-colors font-semibold text-sm group mb-2"
-      >
-        <ArrowLeft size={16} />
-        Back to Directory
-      </button>
+      <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
+        <button 
+          onClick={onBack}
+          className="flex items-center gap-2 text-brand-muted hover:text-brand-primary transition-colors font-semibold text-sm group"
+        >
+          <ArrowLeft size={16} />
+          Back to Directory
+        </button>
+
+        {!showDeleteConfirm ? (
+          <button 
+            onClick={() => setShowDeleteConfirm(true)}
+            className="flex items-center gap-2 text-[10px] font-bold text-red-400 hover:text-red-600 uppercase tracking-widest transition-colors px-3 py-1.5 rounded-lg border border-red-50 hover:bg-red-50"
+          >
+            <Trash2 size={12} />
+            Delete Patient Record
+          </button>
+        ) : (
+          <div className="flex items-center gap-3 bg-red-50 p-2 rounded-xl border border-red-100 animate-in fade-in slide-in-from-right-2 duration-300">
+            <div className="flex items-center gap-2 px-2 text-red-600 font-bold text-[10px] uppercase tracking-widest">
+              <AlertCircle size={14} />
+              Confirm Deletion?
+            </div>
+            <div className="flex gap-1.5">
+              <button 
+                onClick={handleDeleteClient}
+                disabled={isDeleting}
+                className="bg-red-600 text-white px-3 py-1.5 rounded-lg text-xs font-bold hover:bg-red-700 transition-all shadow-sm"
+              >
+                {isDeleting ? 'Deleting...' : 'Yes, Delete'}
+              </button>
+              <button 
+                onClick={() => setShowDeleteConfirm(false)}
+                className="bg-white text-brand-muted px-3 py-1.5 rounded-lg text-xs font-bold border border-red-200 hover:bg-slate-50 transition-all"
+              >
+                Cancel
+              </button>
+            </div>
+          </div>
+        )}
+      </div>
 
       {/* Client Profile Card */}
       <div className="section-card">

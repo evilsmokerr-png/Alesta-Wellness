@@ -1,7 +1,8 @@
 import React, { useState, useEffect } from 'react';
 import { db } from '../lib/firebase';
 import { collection, query, where, getDocs, onSnapshot, orderBy, limit, Timestamp, addDoc, serverTimestamp } from 'firebase/firestore';
-import { Search, UserPlus, Phone, MapPin, Calendar, ClipboardList, Plus, ChevronRight, History } from 'lucide-react';
+import { Search, UserPlus, Phone, MapPin, Calendar, ClipboardList, Plus, ChevronRight, History, Trash2, AlertCircle } from 'lucide-react';
+import { doc, deleteDoc } from 'firebase/firestore';
 import { motion, AnimatePresence } from 'motion/react';
 import { format } from 'date-fns';
 import { Client, Treatment } from '../types';
@@ -16,6 +17,17 @@ export default function ClientDashboard({ userId, onSelectClient, onNewClient }:
   const [searchTerm, setSearchTerm] = useState('');
   const [clients, setClients] = useState<Client[]>([]);
   const [loading, setLoading] = useState(false);
+  const [confirmingId, setConfirmingId] = useState<string | null>(null);
+
+  const handleDelete = async (e: React.MouseEvent, id: string) => {
+    e.stopPropagation();
+    try {
+      await deleteDoc(doc(db, 'clients', id));
+      setConfirmingId(null);
+    } catch (err) {
+      console.error("Error deleting client:", err);
+    }
+  };
 
   useEffect(() => {
     if (!userId) return;
@@ -94,9 +106,46 @@ export default function ClientDashboard({ userId, onSelectClient, onNewClient }:
               onClick={() => onSelectClient(client)}
               className="section-card hover:border-brand-primary/40 hover:shadow-md transition-all cursor-pointer group"
             >
-              <div className="section-title flex justify-between items-center py-2 px-4 sm:px-5">
+              <div className="section-title flex justify-between items-center py-2 px-4 sm:px-5 relative overflow-hidden">
                 <span className="text-[10px] font-bold uppercase tracking-widest bg-blue-50 text-brand-primary px-2 py-0.5 rounded">Profile</span>
-                <ChevronRight size={16} className="text-brand-muted group-hover:text-brand-primary transition-colors" />
+                
+                <div className="flex items-center gap-2">
+                  <AnimatePresence mode="wait">
+                    {confirmingId === client.id ? (
+                      <motion.div 
+                        initial={{ x: 20, opacity: 0 }}
+                        animate={{ x: 0, opacity: 1 }}
+                        exit={{ x: 20, opacity: 0 }}
+                        className="flex items-center gap-1.5"
+                        onClick={(e) => e.stopPropagation()}
+                      >
+                        <button 
+                          onClick={(e) => handleDelete(e, client.id!)}
+                          className="text-[10px] font-bold text-red-600 bg-red-50 hover:bg-red-100 px-2 py-0.5 rounded transition-colors"
+                        >
+                          Confirm
+                        </button>
+                        <button 
+                          onClick={(e) => { e.stopPropagation(); setConfirmingId(null); }}
+                          className="text-[10px] font-bold text-brand-muted hover:text-brand-secondary px-2 py-0.5"
+                        >
+                          Cancel
+                        </button>
+                      </motion.div>
+                    ) : (
+                      <motion.button
+                        initial={{ opacity: 0 }}
+                        animate={{ opacity: 1 }}
+                        exit={{ opacity: 0 }}
+                        onClick={(e) => { e.stopPropagation(); setConfirmingId(client.id!); }}
+                        className="p-1 text-brand-muted hover:text-red-500 transition-colors opacity-0 group-hover:opacity-100"
+                      >
+                        <Trash2 size={14} />
+                      </motion.button>
+                    )}
+                  </AnimatePresence>
+                  <ChevronRight size={16} className="text-brand-muted group-hover:text-brand-primary transition-colors" />
+                </div>
               </div>
               <div className="p-4 sm:p-6">
                 <h3 className="font-bold text-brand-secondary text-base mb-3 group-hover:text-brand-primary transition-colors truncate">{client.name}</h3>
