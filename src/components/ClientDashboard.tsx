@@ -67,7 +67,7 @@ export default function ClientDashboard({ userId, onSelectClient, onNewClient }:
           <input
             type="text"
             placeholder="Search record by name..."
-            className="w-full pl-11 pr-4 py-2.5 sm:py-3 bg-white border border-brand-border rounded-xl text-sm focus:ring-2 focus:ring-brand-primary/10 focus:border-brand-primary transition-all outline-none text-brand-secondary shadow-sm"
+            className="w-full pl-11 pr-4 py-2.5 sm:py-3 bg-white border border-brand-border rounded-xl text-base sm:text-sm focus:ring-2 focus:ring-brand-primary/10 focus:border-brand-primary transition-all outline-none text-brand-secondary shadow-sm"
             value={searchTerm}
             onChange={(e) => setSearchTerm(e.target.value)}
           />

@@ -133,7 +133,7 @@ export default function ClientDetail({ userId, client, onBack, onUpdate }: Clien
               required
               type="text"
               placeholder="Laser Resurfacing"
-              className="w-full px-4 py-2.5 bg-white border border-brand-border rounded-xl text-sm focus:ring-2 focus:ring-brand-primary/10 focus:border-brand-primary transition-all outline-none"
+              className="w-full px-4 py-2.5 bg-white border border-brand-border rounded-xl text-base sm:text-sm focus:ring-2 focus:ring-brand-primary/10 focus:border-brand-primary transition-all outline-none"
               value={newTreatment.treatmentName}
               onChange={(e) => setNewTreatment({ ...newTreatment, treatmentName: e.target.value })}
             />
@@ -143,7 +143,7 @@ export default function ClientDetail({ userId, client, onBack, onUpdate }: Clien
             <input
               type="text"
               placeholder="30J / Hydro-Gel"
-              className="w-full px-4 py-2.5 bg-white border border-brand-border rounded-xl text-sm focus:ring-2 focus:ring-brand-primary/10 focus:border-brand-primary transition-all outline-none"
+              className="w-full px-4 py-2.5 bg-white border border-brand-border rounded-xl text-base sm:text-sm focus:ring-2 focus:ring-brand-primary/10 focus:border-brand-primary transition-all outline-none"
               value={newTreatment.productUsage}
               onChange={(e) => setNewTreatment({ ...newTreatment, productUsage: e.target.value })}
             />
@@ -152,11 +152,12 @@ export default function ClientDetail({ userId, client, onBack, onUpdate }: Clien
             <label className="text-[10px] font-bold text-brand-muted uppercase tracking-widest block ml-1">Follow-up</label>
             <input
               type="date"
-              className="w-full px-4 py-2.5 bg-white border border-brand-border rounded-xl text-sm focus:ring-2 focus:ring-brand-primary/10 focus:border-brand-primary transition-all outline-none"
+              className="w-full px-4 py-2.5 bg-white border border-brand-border rounded-xl text-base sm:text-sm focus:ring-2 focus:ring-brand-primary/10 focus:border-brand-primary transition-all outline-none"
               value={newTreatment.followUpDate}
               onChange={(e) => setNewTreatment({ ...newTreatment, followUpDate: e.target.value })}
             />
           </div>
+
           <button
             disabled={isLogging}
             type="submit"
@@ -166,6 +167,18 @@ export default function ClientDetail({ userId, client, onBack, onUpdate }: Clien
             <span className="font-bold">{isLogging ? 'Saving...' : 'Save Record'}</span>
           </button>
         </form>
+
+        <div className="px-5 sm:px-8 pb-8 pt-0">
+          <div className="space-y-1.5 pt-4 sm:pt-0">
+            <label className="text-[10px] font-bold text-brand-muted uppercase tracking-widest block ml-1">Clinical Treatment Notes</label>
+            <textarea
+              placeholder="Enter comprehensive clinical observations, results, and recommendations..."
+              className="w-full px-4 py-3 bg-white border border-brand-border rounded-xl text-base sm:text-sm focus:ring-2 focus:ring-brand-primary/10 focus:border-brand-primary transition-all outline-none min-h-[100px] resize-none"
+              value={newTreatment.notes}
+              onChange={(e) => setNewTreatment({ ...newTreatment, notes: e.target.value })}
+            />
+          </div>
+        </div>
       </div>
 
       {/* History Table Card */}

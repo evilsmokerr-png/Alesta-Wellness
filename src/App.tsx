@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { User } from 'firebase/auth';
-import { Leaf, Users, LayoutDashboard, Bell, Activity, Calendar, ChevronRight, Phone, Zap, StickyNote, CheckCircle2 } from 'lucide-react';
+import { Leaf, Users, LayoutDashboard, Bell, Activity, Calendar, ChevronRight, Phone, Zap, StickyNote, CheckCircle2, MapPin } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { db } from './lib/firebase';
 import { collectionGroup, query, where, onSnapshot, orderBy, limit, doc, getDoc, updateDoc } from 'firebase/firestore';
@@ -25,7 +25,7 @@ export default function App() {
     followUpsDue: 0
   });
   const [followUpList, setFollowUpList] = useState<any[]>([]);
-  const [clientNames, setClientNames] = useState<Record<string, {name: string, phone: string}>>({});
+  const [clientDataMap, setClientDataMap] = useState<Record<string, Client>>({});
   const [recentTreatments, setRecentTreatments] = useState<any[]>([]);
 
   useEffect(() => {
@@ -69,15 +69,15 @@ export default function App() {
       }));
       setFollowUpList(list);
 
-      // Fetch client names for items that don't have them denormalized
+      // Fetch client data for items that don't have them denormalized
       list.forEach(async (item: any) => {
-        if (!item.clientName && item.parentId && !clientNames[item.parentId]) {
+        if (item.parentId && !clientDataMap[item.parentId]) {
           const cDoc = await getDoc(doc(db, 'clients', item.parentId));
           if (cDoc.exists()) {
-            const data = cDoc.data();
-            setClientNames(prev => ({
+            const data = cDoc.data() as Client;
+            setClientDataMap(prev => ({
               ...prev,
-              [item.parentId!]: { name: data.name, phone: data.phone }
+              [item.parentId!]: { ...data, id: cDoc.id }
             }));
           }
         }
@@ -313,15 +313,27 @@ export default function App() {
                                  </div>
                                  <div className="min-w-0">
                                    <div className="text-base sm:text-lg font-bold text-brand-secondary leading-tight truncate">
-                                     {item.clientName || clientNames[item.parentId!]?.name || 'Unknown Patient'}
+                                     {item.clientName || clientDataMap[item.parentId!]?.name || 'Unknown Patient'}
                                    </div>
-                                   <div className="flex items-center gap-2 mt-0.5">
-                                      <a href={`tel:${item.clientPhone || clientNames[item.parentId!]?.phone}`} className="text-xs font-medium text-brand-primary flex items-center gap-1 hover:underline">
+                                   <div className="flex flex-wrap items-center gap-x-2 gap-y-1 mt-1">
+                                      <a 
+                                        href={`tel:${(item.clientPhone || clientDataMap[item.parentId!]?.phone || '').replace(/\D/g, '')}`} 
+                                        className="text-xs font-medium text-brand-primary flex items-center gap-1.5 hover:underline bg-blue-50/50 px-2 py-0.5 rounded-full"
+                                      >
                                         <Phone size={12} />
-                                        {item.clientPhone || clientNames[item.parentId!]?.phone || 'No number'}
+                                        {item.clientPhone || clientDataMap[item.parentId!]?.phone || 'No number'}
                                       </a>
-                                      <span className="text-slate-300">•</span>
-                                      <span className="text-[10px] uppercase font-bold text-brand-muted tracking-wider">Patient Contact</span>
+                                      {(item.clientAddress || clientDataMap[item.parentId!]?.address) && (
+                                        <>
+                                          <span className="text-slate-300 hidden sm:inline">•</span>
+                                          <div className="text-[11px] text-brand-muted flex items-center gap-1.5">
+                                            <MapPin size={12} />
+                                            <span className="truncate max-w-[200px] sm:max-w-md">
+                                              {item.clientAddress || clientDataMap[item.parentId!]?.address}
+                                            </span>
+                                          </div>
+                                        </>
+                                      )}
                                    </div>
                                  </div>
                                </div>
@@ -367,7 +379,7 @@ export default function App() {
                                    <StickyNote size={10} />
                                    Clinical Notes
                                  </div>
-                                 <p className="text-sm text-brand-secondary leading-relaxed line-clamp-3 italic">
+                                 <p className="text-sm text-brand-secondary leading-relaxed italic">
                                    "{item.notes}"
                                  </p>
                                </div>
@@ -405,7 +417,7 @@ export default function App() {
                               
                               <div className="flex gap-2 w-full sm:w-auto">
                                 <a 
-                                  href={`tel:${item.clientPhone || clientNames[item.parentId!]?.phone}`}
+                                  href={`tel:${(item.clientPhone || clientDataMap[item.parentId!]?.phone || '').replace(/\D/g, '')}`}
                                   className="flex-1 sm:flex-none flex items-center justify-center gap-2 px-4 py-2 bg-white border border-brand-border rounded-lg text-xs font-bold text-brand-secondary hover:border-brand-primary/30 transition-all shadow-sm"
                                 >
                                   <Phone size={14} />

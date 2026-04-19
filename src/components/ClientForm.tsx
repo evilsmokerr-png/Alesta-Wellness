@@ -81,7 +81,7 @@ export default function ClientForm({ userId, client, onClose, onSaved }: ClientF
                 required
                 type="text"
                 placeholder="Ex: Sarah Jenkins"
-                className="w-full pl-10 pr-4 py-3 bg-white border border-brand-border rounded-xl focus:ring-2 focus:ring-brand-primary/10 focus:border-brand-primary transition-all outline-none text-sm text-brand-secondary"
+                className="w-full pl-10 pr-4 py-3 bg-white border border-brand-border rounded-xl focus:ring-2 focus:ring-brand-primary/10 focus:border-brand-primary transition-all outline-none text-base sm:text-sm text-brand-secondary"
                 value={formData.name}
                 onChange={(e) => setFormData({ ...formData, name: e.target.value })}
               />
@@ -96,7 +96,7 @@ export default function ClientForm({ userId, client, onClose, onSaved }: ClientF
                 required
                 type="tel"
                 placeholder="+1 (555) 000-0000"
-                className="w-full pl-10 pr-4 py-3 bg-white border border-brand-border rounded-xl focus:ring-2 focus:ring-brand-primary/10 focus:border-brand-primary transition-all outline-none text-sm text-brand-secondary mono"
+                className="w-full pl-10 pr-4 py-3 bg-white border border-brand-border rounded-xl focus:ring-2 focus:ring-brand-primary/10 focus:border-brand-primary transition-all outline-none text-base sm:text-sm text-brand-secondary mono"
                 value={formData.phone}
                 onChange={(e) => setFormData({ ...formData, phone: e.target.value })}
               />
@@ -110,7 +110,7 @@ export default function ClientForm({ userId, client, onClose, onSaved }: ClientF
               <textarea
                 placeholder="Residential/Billing address..."
                 rows={3}
-                className="w-full pl-10 pr-4 py-3 bg-white border border-brand-border rounded-xl focus:ring-2 focus:ring-brand-primary/10 focus:border-brand-primary transition-all outline-none text-sm text-brand-secondary resize-none"
+                className="w-full pl-10 pr-4 py-3 bg-white border border-brand-border rounded-xl focus:ring-2 focus:ring-brand-primary/10 focus:border-brand-primary transition-all outline-none text-base sm:text-sm text-brand-secondary resize-none"
                 value={formData.address}
                 onChange={(e) => setFormData({ ...formData, address: e.target.value })}
               />
