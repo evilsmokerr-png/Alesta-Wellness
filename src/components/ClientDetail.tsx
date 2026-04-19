@@ -5,6 +5,7 @@ import { ArrowLeft, Plus, History, Calendar, Package, Zap, StickyNote, Save, Che
 import { motion, AnimatePresence } from 'motion/react';
 import { format } from 'date-fns';
 import { Client, Treatment } from '../types';
+import { handleFirestoreError } from '../lib/errorHandlers';
 
 interface ClientDetailProps {
   userId: string;
@@ -105,8 +106,8 @@ export default function ClientDetail({ userId, client, onBack, onUpdate }: Clien
       onUpdate({ ...client, updatedAt: new Date() } as any);
       alert("Treatment successfully logged");
     } catch (error) {
-      console.error("Error logging treatment:", error);
-      alert("Failed to save treatment record. Please check your connection.");
+      const msg = handleFirestoreError(error, 'create', `clients/${client.id}/treatments`);
+      alert(msg);
     } finally {
       setIsLogging(false);
     }

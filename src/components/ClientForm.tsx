@@ -4,6 +4,7 @@ import { collection, addDoc, serverTimestamp, updateDoc, doc } from 'firebase/fi
 import { X, Save, User, Phone, MapPin } from 'lucide-react';
 import { motion } from 'motion/react';
 import { Client } from '../types';
+import { handleFirestoreError } from '../lib/errorHandlers';
 
 interface ClientFormProps {
   userId: string;
@@ -54,8 +55,8 @@ export default function ClientForm({ userId, client, onClose, onSaved }: ClientF
         onSaved({ id: docRef.id, ...clientData, createdAt: new Date(), updatedAt: new Date() } as any);
       }
     } catch (error) {
-      console.error("Error saving client:", error);
-      alert("Failed to save patient record. Please check your connection and try again.");
+      const msg = handleFirestoreError(error, client?.id ? 'update' : 'create', 'clients');
+      alert(msg);
     } finally {
       setLoading(false);
     }

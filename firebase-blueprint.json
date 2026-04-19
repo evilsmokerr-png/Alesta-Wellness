@@ -23,12 +23,15 @@
         "date": { "type": "string", "format": "date-time" },
         "treatmentName": { "type": "string", "description": "Name of the treatment" },
         "productUsage": { "type": "string", "description": "Products used or energy level" },
+        "doctorName": { "type": "string", "description": "Doctor who performed the treatment" },
         "ownerId": { "type": "string", "description": "UID of the user who owns this treatment" },
+        "clientName": { "type": "string", "description": "Patient name at time of log" },
+        "clientPhone": { "type": "string", "description": "Patient phone at time of log" },
         "followUpDate": { "type": "string", "format": "date-time" },
         "notes": { "type": "string" },
         "createdAt": { "type": "string", "format": "date-time" }
       },
-      "required": ["date", "treatmentName", "ownerId", "createdAt"]
+      "required": ["date", "treatmentName", "ownerId", "createdAt", "doctorName"]
     }
   },
   "firestore": {
