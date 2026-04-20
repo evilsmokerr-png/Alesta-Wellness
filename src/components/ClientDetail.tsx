@@ -21,6 +21,7 @@ export default function ClientDetail({ userId, client, onBack, onUpdate }: Clien
   const [isLogging, setIsLogging] = useState(false);
   const [isDeleting, setIsDeleting] = useState(false);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
+  const [confirmingTreatmentId, setConfirmingTreatmentId] = useState<string | null>(null);
 
   const [newTreatment, setNewTreatment] = useState({
     treatmentName: '',
@@ -126,6 +127,24 @@ export default function ClientDetail({ userId, client, onBack, onUpdate }: Clien
       alert("Failed to delete patient record. Please try again.");
     } finally {
       setIsDeleting(false);
+    }
+  };
+
+  const handleDeleteTreatment = async (treatmentId: string) => {
+    if (!client.id) return;
+    
+    try {
+      await deleteDoc(doc(db, 'clients', client.id, 'treatments', treatmentId));
+      setTreatments(treatments.filter(t => t.id !== treatmentId));
+      setConfirmingTreatmentId(null);
+      // Update client's updatedAt to reflect change in records
+      await updateDoc(doc(db, 'clients', client.id), {
+        updatedAt: serverTimestamp()
+      });
+      onUpdate({ ...client, updatedAt: new Date() } as any);
+    } catch (error) {
+      const msg = handleFirestoreError(error, 'delete', `clients/${client.id}/treatments/${treatmentId}`);
+      alert(msg);
     }
   };
 
@@ -293,6 +312,7 @@ export default function ClientDetail({ userId, client, onBack, onUpdate }: Clien
                 <th className="px-5 sm:px-8 py-3 sm:py-4 text-[10px] font-bold text-brand-muted uppercase tracking-wider border-b border-brand-border">Intensity</th>
                 <th className="px-5 sm:px-8 py-3 sm:py-4 text-[10px] font-bold text-brand-muted uppercase tracking-wider border-b border-brand-border text-right">Doctor</th>
                 <th className="px-5 sm:px-8 py-3 sm:py-4 text-[10px] font-bold text-brand-muted uppercase tracking-wider border-b border-brand-border text-right">Follow-up</th>
+                <th className="px-5 sm:px-8 py-3 sm:py-4 text-[10px] font-bold text-brand-muted uppercase tracking-wider border-b border-brand-border text-right">Actions</th>
               </tr>
             </thead>
             <tbody>
@@ -318,11 +338,44 @@ export default function ClientDetail({ userId, client, onBack, onUpdate }: Clien
                   <td className="px-5 sm:px-8 py-3 sm:py-4 text-[11px] sm:text-sm font-medium text-brand-muted italic text-right whitespace-nowrap">
                     {t.followUpDate ? format(t.followUpDate instanceof Date ? t.followUpDate : t.followUpDate.toDate(), 'dd-MMM-yy') : '--'}
                   </td>
+                  <td className="px-5 sm:px-8 py-3 sm:py-4 text-right">
+                    <AnimatePresence mode="wait">
+                      {confirmingTreatmentId === t.id ? (
+                        <motion.div 
+                          initial={{ x: 10, opacity: 0 }}
+                          animate={{ x: 0, opacity: 1 }}
+                          exit={{ x: 10, opacity: 0 }}
+                          className="flex items-center justify-end gap-1.5"
+                        >
+                          <button
+                            onClick={() => handleDeleteTreatment(t.id!)}
+                            className="text-[10px] font-bold text-red-600 bg-red-50 hover:bg-red-100 px-2 py-0.5 rounded transition-colors border border-red-100"
+                          >
+                            Confirm
+                          </button>
+                          <button
+                            onClick={() => setConfirmingTreatmentId(null)}
+                            className="text-[10px] font-bold text-brand-muted hover:text-brand-secondary px-2 py-0.5"
+                          >
+                            Cancel
+                          </button>
+                        </motion.div>
+                      ) : (
+                        <button 
+                          onClick={() => setConfirmingTreatmentId(t.id!)}
+                          className="p-2 text-brand-muted hover:text-red-500 transition-colors"
+                          title="Delete Record"
+                        >
+                          <Trash2 size={14} />
+                        </button>
+                      )}
+                    </AnimatePresence>
+                  </td>
                 </tr>
               ))}
               {treatments.length === 0 && !loading && (
                 <tr>
-                  <td colSpan={4} className="px-8 py-16 text-center text-brand-muted font-medium">
+                  <td colSpan={6} className="px-8 py-16 text-center text-brand-muted font-medium">
                     No clinical history recorded.
                   </td>
                 </tr>

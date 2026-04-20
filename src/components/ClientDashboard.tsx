@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { db } from '../lib/firebase';
 import { collection, query, where, getDocs, onSnapshot, orderBy, limit, Timestamp, addDoc, serverTimestamp } from 'firebase/firestore';
-import { Search, UserPlus, Phone, MapPin, Calendar, ClipboardList, Plus, ChevronRight, History, Trash2, AlertCircle } from 'lucide-react';
+import { Search, UserPlus, Phone, MapPin, Calendar, ClipboardList, Plus, ChevronRight, History, Trash2, AlertCircle, RefreshCw } from 'lucide-react';
 import { doc, deleteDoc } from 'firebase/firestore';
 import { motion, AnimatePresence } from 'motion/react';
 import { format } from 'date-fns';
@@ -11,9 +11,10 @@ interface DashboardProps {
   userId: string;
   onSelectClient: (client: Client) => void;
   onNewClient: () => void;
+  onRescheduleClient: (client: Client) => void;
 }
 
-export default function ClientDashboard({ userId, onSelectClient, onNewClient }: DashboardProps) {
+export default function ClientDashboard({ userId, onSelectClient, onNewClient, onRescheduleClient }: DashboardProps) {
   const [searchTerm, setSearchTerm] = useState('');
   const [clients, setClients] = useState<Client[]>([]);
   const [loading, setLoading] = useState(false);
@@ -138,7 +139,7 @@ export default function ClientDashboard({ userId, onSelectClient, onNewClient }:
                         animate={{ opacity: 1 }}
                         exit={{ opacity: 0 }}
                         onClick={(e) => { e.stopPropagation(); setConfirmingId(client.id!); }}
-                        className="p-1 text-brand-muted hover:text-red-500 transition-colors opacity-0 group-hover:opacity-100"
+                        className="p-1 text-brand-muted hover:text-red-500 transition-colors"
                       >
                         <Trash2 size={14} />
                       </motion.button>
@@ -152,7 +153,29 @@ export default function ClientDashboard({ userId, onSelectClient, onNewClient }:
                 <div className="space-y-2.5">
                   <div className="flex flex-col">
                     <span className="text-[10px] font-bold text-brand-muted uppercase tracking-wider mb-0.5">Contact</span>
-                    <span className="mono text-xs sm:text-sm text-brand-secondary font-medium">{client.phone}</span>
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center gap-2">
+                        <span className="mono text-xs sm:text-sm text-brand-secondary font-medium">{client.phone}</span>
+                        <a
+                          href={`tel:${client.phone.replace(/\D/g, '')}`}
+                          onClick={(e) => e.stopPropagation()}
+                          className="p-1.5 bg-blue-50 text-brand-primary rounded-lg hover:bg-blue-100 transition-colors"
+                        >
+                          <Phone size={12} />
+                        </a>
+                      </div>
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          onRescheduleClient(client);
+                        }}
+                        className="p-1.5 bg-orange-50 text-orange-600 rounded-lg hover:bg-orange-100 transition-colors flex items-center gap-1.5 px-2"
+                        title="Reschedule Follow-up"
+                      >
+                        <RefreshCw size={12} />
+                        <span className="text-[10px] font-bold uppercase tracking-widest">Reschedule</span>
+                      </button>
+                    </div>
                   </div>
                   {client.address && (
                     <div className="flex flex-col">

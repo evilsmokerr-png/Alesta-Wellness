@@ -1,19 +1,21 @@
 import { useState, useEffect } from 'react';
 import { User } from 'firebase/auth';
-import { Leaf, Users, LayoutDashboard, Bell, Activity, Calendar, ChevronRight, Phone, Zap, StickyNote, CheckCircle2, MapPin, Stethoscope } from 'lucide-react';
+import { Leaf, Users, LayoutDashboard, Bell, Activity, Calendar, ChevronRight, Phone, Zap, StickyNote, CheckCircle2, MapPin, Stethoscope, Tag, MessageSquare, AlertTriangle, RefreshCw, Trash2, Clock, History } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { db } from './lib/firebase';
-import { collectionGroup, query, where, onSnapshot, orderBy, limit, doc, getDoc, updateDoc, serverTimestamp } from 'firebase/firestore';
-import { startOfDay, endOfDay, startOfMonth, endOfMonth, format } from 'date-fns';
+import { collection, collectionGroup, query, where, onSnapshot, orderBy, limit, doc, getDoc, getDocs, updateDoc, deleteDoc, serverTimestamp } from 'firebase/firestore';
+import { startOfDay, endOfDay, startOfMonth, endOfMonth, format, isToday, addDays, isBefore } from 'date-fns';
 import Auth from './components/Auth';
 import DashboardView from './components/DashboardView';
 import ClientDashboard from './components/ClientDashboard';
 import ClientDetail from './components/ClientDetail';
 import ClientForm from './components/ClientForm';
-import { Client } from './types';
+import LeadDashboard from './components/LeadDashboard';
+import RescheduleModal from './components/RescheduleModal';
+import { Client, Lead } from './types';
 import { handleFirestoreError } from './lib/errorHandlers';
 
-type ViewType = 'dashboard' | 'clients' | 'notifications';
+type ViewType = 'dashboard' | 'clients' | 'notifications' | 'leads';
 
 export default function App() {
   const [user, setUser] = useState<User | null>(null);
@@ -23,21 +25,29 @@ export default function App() {
   
   const [stats, setStats] = useState({
     treatmentsToday: 0,
-    followUpsDue: 0
+    followUpsDue: 0,
+    activeLeads: 0,
+    leadsDue: 0
   });
   const [followUpList, setFollowUpList] = useState<any[]>([]);
+  const [leadsDueList, setLeadsDueList] = useState<Lead[]>([]);
   const [clientDataMap, setClientDataMap] = useState<Record<string, Client>>({});
   const [recentTreatments, setRecentTreatments] = useState<any[]>([]);
+
+  const [rescheduleData, setRescheduleData] = useState<{ type: 'lead' | 'followup', data: any } | null>(null);
+  const [confirmingDeleteId, setConfirmingDeleteId] = useState<string | null>(null);
 
   useEffect(() => {
     if (!user) {
       setStats({ treatmentsToday: 0, followUpsDue: 0 });
       setFollowUpList([]);
       setRecentTreatments([]);
+      setStats({ treatmentsToday: 0, followUpsDue: 0, activeLeads: 0 });
       return;
     }
 
     const todayEnd = endOfDay(new Date());
+    const notificationThreshold = endOfDay(addDays(new Date(), 1));
     const monthStart = startOfMonth(new Date());
     const monthEnd = endOfMonth(new Date());
 
@@ -57,7 +67,7 @@ export default function App() {
     const followUpsQuery = query(
       collectionGroup(db, 'treatments'),
       where('ownerId', '==', user.uid),
-      where('followUpDate', '<=', todayEnd),
+      where('followUpDate', '<=', notificationThreshold),
       orderBy('followUpDate', 'desc')
     );
 
@@ -101,10 +111,36 @@ export default function App() {
       })));
     });
 
+    // 5. Active Leads Count
+    const leadsQuery = query(
+      collection(db, 'leads'),
+      where('ownerId', '==', user.uid),
+      where('status', 'in', ['enquiry', 'appointment_set'])
+    );
+
+    const unsubLeadsCount = onSnapshot(leadsQuery, (snapshot) => {
+      setStats(prev => ({ ...prev, activeLeads: snapshot.size }));
+    });
+
+    // 6. Leads Due Today/Overdue for Notifications
+    const leadsDueTodayQuery = query(
+      collection(db, 'leads'),
+      where('ownerId', '==', user.uid),
+      where('appointmentDate', '<=', notificationThreshold),
+      where('status', 'in', ['enquiry', 'appointment_set'])
+    );
+
+    const unsubLeadsDue = onSnapshot(leadsDueTodayQuery, (snapshot) => {
+      setLeadsDueList(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Lead)));
+      setStats(prev => ({ ...prev, leadsDue: snapshot.size }));
+    });
+
     return () => {
       unsubTreatments();
       unsubFollowUps();
       unsubRecent();
+      unsubLeadsCount();
+      unsubLeadsDue();
     };
   }, [user]);
 
@@ -143,6 +179,62 @@ export default function App() {
     }
   };
 
+  const handleDeleteTreatmentRecord = async (clientId: string, treatmentId: string) => {
+    if (!clientId || !treatmentId) return;
+    try {
+      await deleteDoc(doc(db, 'clients', clientId, 'treatments', treatmentId));
+      setConfirmingDeleteId(null);
+      // Update client's updatedAt
+      await updateDoc(doc(db, 'clients', clientId), {
+        updatedAt: serverTimestamp()
+      });
+    } catch (error) {
+      const msg = handleFirestoreError(error, 'delete', `clients/${clientId}/treatments/${treatmentId}`);
+      alert(msg);
+    }
+  };
+
+  const handleMarkLeadVisited = async (leadId: string) => {
+    try {
+      await updateDoc(doc(db, 'leads', leadId), {
+        status: 'visited',
+        updatedAt: serverTimestamp()
+      });
+    } catch (error) {
+      const msg = handleFirestoreError(error, 'update', `leads/${leadId}`);
+      alert(msg);
+    }
+  };
+
+  const handleDeleteLead = async (leadId: string) => {
+    if (!leadId) return;
+    try {
+      await deleteDoc(doc(db, 'leads', leadId));
+      setConfirmingDeleteId(null);
+    } catch (error) {
+      const msg = handleFirestoreError(error, 'delete', `leads/${leadId}`);
+      alert(msg);
+    }
+  };
+
+  const handleRescheduleClient = async (client: Client) => {
+    if (!user || !client.id) return;
+    try {
+      const treatmentsRef = collection(db, 'clients', client.id, 'treatments');
+      const q = query(treatmentsRef, orderBy('date', 'desc'), limit(1));
+      const querySnapshot = await getDocs(q);
+      
+      if (!querySnapshot.empty) {
+        const latestTreatment = { id: querySnapshot.docs[0].id, parentId: client.id, ...querySnapshot.docs[0].data() };
+        setRescheduleData({ type: 'followup', data: latestTreatment });
+      } else {
+        alert("No treatment record found to reschedule. Please log a treatment first.");
+      }
+    } catch (error) {
+      console.error("Error fetching latest treatment for reschedule:", error);
+    }
+  };
+
   return (
     <div className="min-h-screen font-sans flex bg-slate-50/50">
       {/* Sidebar - Professional Polish Style */}
@@ -167,7 +259,14 @@ export default function App() {
             className="w-full text-left bg-slate-50 p-4 rounded-xl border border-brand-border hover:border-brand-primary/30 transition-colors group"
           >
             <div className="text-[10px] font-bold text-brand-muted uppercase tracking-wider mb-1 group-hover:text-brand-primary transition-colors">Follow-ups Due</div>
-            <div className="text-2xl font-bold text-brand-secondary">{stats.followUpsDue.toString().padStart(2, '0')}</div>
+            <div className="text-2xl font-bold text-brand-secondary">{(stats.followUpsDue + stats.leadsDue).toString().padStart(2, '0')}</div>
+          </button>
+          <button 
+            onClick={() => handleNavClick('leads')}
+            className="w-full text-left bg-emerald-50/50 p-4 rounded-xl border border-emerald-100 hover:border-emerald-500/30 transition-colors group"
+          >
+            <div className="text-[10px] font-bold text-emerald-600 uppercase tracking-wider mb-1">New Inquiries</div>
+            <div className="text-2xl font-bold text-brand-secondary">{stats.activeLeads.toString().padStart(2, '0')}</div>
           </button>
         </div>
 
@@ -189,6 +288,15 @@ export default function App() {
           >
             <Users size={18} />
             Clients
+          </button>
+          <button 
+            onClick={() => handleNavClick('leads')}
+            className={`w-full flex items-center gap-3 px-4 py-2.5 rounded-lg font-medium text-sm transition-all ${
+              view === 'leads' ? 'bg-emerald-50 text-emerald-600' : 'text-brand-muted hover:bg-slate-50'
+            }`}
+          >
+            <Phone size={18} />
+            Inquiries
           </button>
           <button 
             onClick={() => handleNavClick('notifications')}
@@ -222,6 +330,7 @@ export default function App() {
             <h1 className="text-lg font-bold text-brand-secondary tracking-tight">
               {view === 'dashboard' && !selectedClient && "Clinical Overview"}
               {view === 'clients' && !selectedClient && "Patient Records"}
+              {view === 'leads' && !selectedClient && "Manage Inquiries"}
               {view === 'notifications' && !selectedClient && "Daily Follow-ups"}
               {selectedClient && `Patient: ${selectedClient.name}`}
             </h1>
@@ -293,12 +402,184 @@ export default function App() {
                        <p className="text-brand-muted text-xs sm:text-sm mt-1">Directly manage patient interactions and clinical outcomes.</p>
                      </div>
                      <div className="bg-brand-primary text-white text-xs font-bold px-3 py-1 rounded-full shadow-lg shadow-brand-primary/20">
-                       {followUpList.length} Due
+                       {followUpList.length + leadsDueList.length} Due
                      </div>
                    </div>
                    
-                   {followUpList.length > 0 ? (
+                   {leadsDueList.length > 0 && (
                      <div className="space-y-4">
+                       <div className="flex items-center gap-2 px-2 text-[#2ecc71]">
+                         <Bell size={18} />
+                         <h3 className="font-bold text-sm uppercase tracking-widest">Inquiry Appointments Due</h3>
+                       </div>
+                       {leadsDueList.map((lead, idx) => {
+                         const apptDate = lead.appointmentDate?.toDate ? lead.appointmentDate.toDate() : new Date(lead.appointmentDate);
+                         return (
+                           <motion.div 
+                             key={lead.id} 
+                             initial={{ opacity: 0, x: -10 }}
+                             animate={{ opacity: 1, x: 0 }}
+                             transition={{ delay: idx * 0.05 }}
+                             className={`bg-white rounded-2xl border ${isToday(apptDate) ? 'border-emerald-200 ring-1 ring-emerald-50' : 'border-brand-border'} overflow-hidden shadow-sm hover:shadow-md transition-all group`}
+                           >
+                             <div className="p-4 sm:p-6 space-y-4">
+                               <div className="flex items-start justify-between border-b border-slate-50 pb-4">
+                                 <div className="flex items-center gap-3 sm:gap-4">
+                                   <div className={`w-10 h-10 sm:w-12 sm:h-12 rounded-2xl ${isToday(apptDate) ? 'bg-emerald-50 text-emerald-600' : 'bg-orange-50 text-orange-600'} flex items-center justify-center border border-current opacity-20 flex-shrink-0`}>
+                                     <Phone size={20} />
+                                   </div>
+                                   <div className="min-w-0">
+                                     <div className="text-base sm:text-lg font-bold text-brand-secondary leading-tight truncate">
+                                       {lead.name}
+                                     </div>
+                                     <div className="flex flex-wrap items-center gap-x-2 gap-y-1 mt-1">
+                                       <a href={`tel:${lead.phone.replace(/\D/g, '')}`} className="text-xs font-medium text-brand-primary flex items-center gap-1.5 hover:underline bg-blue-50/50 px-2 py-0.5 rounded-full">
+                                         <Phone size={12} /> {lead.phone}
+                                       </a>
+                                       <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${
+                                         isToday(apptDate) 
+                                           ? 'bg-emerald-50 text-emerald-600' 
+                                           : isBefore(apptDate, startOfDay(new Date())) 
+                                             ? 'bg-red-50 text-red-600' 
+                                             : 'bg-blue-50 text-blue-600'
+                                       }`}>
+                                         {isToday(apptDate) 
+                                           ? 'APPOINTMENT TODAY' 
+                                           : isBefore(apptDate, startOfDay(new Date())) 
+                                             ? 'OVERDUE APPOINTMENT' 
+                                             : 'DUE TOMORROW'}
+                                       </span>
+                                     </div>
+                                   </div>
+                                 </div>
+                                 <div className="hidden sm:flex flex-col items-end">
+                                   <div className="text-[10px] font-bold text-brand-muted uppercase tracking-widest mb-1">Appt Date</div>
+                                   <div className={`text-xs font-bold px-2 py-1 rounded ${isToday(apptDate) ? 'bg-emerald-100 text-emerald-800' : 'bg-slate-100 text-brand-secondary'}`}>
+                                     {format(apptDate, 'MMM d, yyyy')}
+                                   </div>
+                                 </div>
+                               </div>
+
+                                <div className="grid grid-cols-1 sm:grid-cols-4 gap-4">
+                                  <div className="space-y-1">
+                                    <div className="text-[10px] font-bold text-brand-muted uppercase tracking-widest flex items-center gap-1">
+                                      <Tag size={10} className="text-brand-primary" />
+                                      Source
+                                    </div>
+                                    <div className="text-sm font-bold text-brand-secondary">{lead.source || 'Direct Inquiry'}</div>
+                                  </div>
+                                  <div className="space-y-1">
+                                    <div className="text-[10px] font-bold text-brand-muted uppercase tracking-widest flex items-center gap-1">
+                                      <MessageSquare size={10} className="text-blue-500" />
+                                      Concern
+                                    </div>
+                                    <div className="text-sm font-semibold text-brand-secondary">{lead.concern || 'Not specified'}</div>
+                                  </div>
+                                  <div className="space-y-1">
+                                    <div className="text-[10px] font-bold text-brand-muted uppercase tracking-widest flex items-center gap-1">
+                                      <Clock size={10} className="text-orange-500" />
+                                      Current Status
+                                    </div>
+                                    <div className="text-sm font-bold text-brand-secondary uppercase tracking-tighter">{lead.status.replace('_', ' ')}</div>
+                                  </div>
+                                  <div className="space-y-1">
+                                    <div className="text-[10px] font-bold text-brand-muted uppercase tracking-widest flex items-center gap-1">
+                                      <CheckCircle2 size={10} className="text-emerald-500" />
+                                      Last Update
+                                    </div>
+                                    <div className="text-sm font-medium text-brand-muted">
+                                      {lead.updatedAt?.toDate ? format(lead.updatedAt.toDate(), 'MMM d, p') : 'Pending'}
+                                    </div>
+                                  </div>
+                                </div>
+
+                               {lead.notes && (
+                                 <div className="bg-brand-primary/5 rounded-2xl p-5 border border-brand-primary/10 mt-2 relative overflow-hidden group/notes">
+                                   <div className="absolute top-0 right-0 w-24 h-24 bg-brand-primary/5 rounded-full -mr-12 -mt-12 transition-transform group-hover/notes:scale-110" />
+                                   <div className="text-[10px] font-bold text-brand-primary uppercase tracking-widest flex items-center gap-2 mb-3 relative">
+                                     <div className="p-1 px-1.5 bg-brand-primary text-white rounded">
+                                       <StickyNote size={10} />
+                                     </div>
+                                     Client Care Notes
+                                   </div>
+                                   <p className="text-sm text-brand-secondary leading-relaxed relative pl-2 border-l-2 border-brand-primary/20">
+                                     {lead.notes}
+                                   </p>
+                                 </div>
+                               )}
+                             </div>
+
+                             <div className="bg-slate-50 border-t border-slate-100 p-4 flex items-center justify-between sm:px-6">
+                               <button 
+                                 onClick={() => setView('leads')}
+                                 className="hidden sm:flex items-center gap-2 text-xs font-bold text-brand-muted hover:text-brand-primary transition-colors uppercase tracking-widest"
+                               >
+                                 <LayoutDashboard size={14} />
+                                 Manage All Inquiries
+                                </button>
+                                <div className="flex gap-2 w-full sm:w-auto items-center">
+                                  <AnimatePresence mode="wait">
+                                    {confirmingDeleteId === lead.id ? (
+                                      <motion.div 
+                                        initial={{ x: 10, opacity: 0 }}
+                                        animate={{ x: 0, opacity: 1 }}
+                                        exit={{ x: 10, opacity: 0 }}
+                                        className="flex items-center gap-1.5"
+                                      >
+                                        <button
+                                          onClick={() => handleDeleteLead(lead.id!)}
+                                          className="text-[10px] font-bold text-red-600 bg-red-50 hover:bg-red-100 px-3 py-1.5 rounded-lg transition-colors border border-red-100 uppercase tracking-widest"
+                                        >
+                                          Confirm Delete
+                                        </button>
+                                        <button
+                                          onClick={() => setConfirmingDeleteId(null)}
+                                          className="text-[10px] font-bold text-brand-muted hover:text-brand-secondary px-3 py-1.5 rounded-lg border border-slate-100 uppercase tracking-widest"
+                                        >
+                                          Cancel
+                                        </button>
+                                      </motion.div>
+                                    ) : (
+                                      <>
+                                        <button 
+                                          onClick={() => setRescheduleData({ type: 'lead', data: lead })}
+                                          className="flex-1 sm:flex-none flex items-center justify-center gap-2 px-4 py-2 bg-white border border-brand-border rounded-lg text-xs font-bold text-brand-secondary hover:border-brand-primary/30 transition-all shadow-sm"
+                                        >
+                                          <RefreshCw size={14} /> Reschedule
+                                        </button>
+                                        <a href={`tel:${lead.phone.replace(/\D/g, '')}`} className="flex-1 sm:flex-none flex items-center justify-center gap-2 px-4 py-2 bg-white border border-brand-border rounded-lg text-xs font-bold text-brand-secondary hover:border-brand-primary/30 transition-all shadow-sm">
+                                          <Phone size={14} /> Call Now
+                                        </a>
+                                        <button 
+                                          onClick={() => handleMarkLeadVisited(lead.id!)}
+                                          className="flex-3 sm:flex-none flex items-center justify-center gap-2 px-4 py-2 bg-[#2ecc71] text-white rounded-lg text-xs font-bold hover:bg-[#27ae60] transition-all shadow-md shadow-emerald-500/10"
+                                        >
+                                          <CheckCircle2 size={14} /> Mark Visited
+                                        </button>
+                                        <button 
+                                          onClick={() => setConfirmingDeleteId(lead.id!)}
+                                          className="p-2 text-brand-muted hover:text-red-500 transition-colors"
+                                          title="Delete Inquiry"
+                                        >
+                                          <Trash2 size={18} />
+                                        </button>
+                                      </>
+                                    )}
+                                  </AnimatePresence>
+                                </div>
+                             </div>
+                           </motion.div>
+                         );
+                       })}
+                     </div>
+                   )}
+                   
+                   {followUpList.length > 0 ? (
+                     <div className="space-y-4 pt-4">
+                       <div className="flex items-center gap-2 px-2 text-brand-primary">
+                         <Activity size={18} />
+                         <h3 className="font-bold text-sm uppercase tracking-widest">Treatment Followup Reminders Due</h3>
+                       </div>
                        {followUpList.map((item, idx) => (
                          <motion.div 
                            key={item.id} 
@@ -326,6 +607,24 @@ export default function App() {
                                         <Phone size={12} />
                                         {item.clientPhone || clientDataMap[item.parentId!]?.phone || 'No number'}
                                       </a>
+                                      {(() => {
+                                        const fDate = item.followUpDate?.toDate ? item.followUpDate.toDate() : new Date(item.followUpDate);
+                                        return (
+                                          <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${
+                                            isToday(fDate) 
+                                              ? 'bg-emerald-50 text-emerald-600' 
+                                              : isBefore(fDate, startOfDay(new Date())) 
+                                                ? 'bg-red-50 text-red-600' 
+                                                : 'bg-blue-50 text-blue-600'
+                                          }`}>
+                                            {isToday(fDate) 
+                                              ? 'FOLLOW-UP TODAY' 
+                                              : isBefore(fDate, startOfDay(new Date())) 
+                                                ? 'OVERDUE' 
+                                                : 'DUE TOMORROW'}
+                                          </span>
+                                        );
+                                      })()}
                                       {(item.clientAddress || clientDataMap[item.parentId!]?.address) && (
                                         <>
                                           <span className="text-slate-300 hidden sm:inline">•</span>
@@ -349,49 +648,78 @@ export default function App() {
                              </div>
 
                              {/* Treatment Details Grid */}
-                             <div className="grid grid-cols-1 sm:grid-cols-4 gap-4 py-2">
-                               <div className="space-y-1">
-                                 <div className="text-[10px] font-bold text-brand-muted uppercase tracking-widest flex items-center gap-1">
-                                   <Activity size={10} className="text-brand-primary" />
-                                   Treatment
+                             <div className="grid grid-cols-1 sm:grid-cols-3 gap-6 py-2 border-t border-slate-50 pt-4">
+                               <div className="space-y-4">
+                                 <div className="space-y-1">
+                                   <div className="text-[10px] font-bold text-brand-muted uppercase tracking-widest flex items-center gap-1">
+                                     <Activity size={10} className="text-brand-primary" />
+                                     Last Treatment performed
+                                   </div>
+                                   <div className="text-sm font-bold text-brand-secondary">{item.treatmentName}</div>
                                  </div>
-                                 <div className="text-sm font-bold text-brand-secondary">{item.treatmentName}</div>
+                                 <div className="space-y-1">
+                                   <div className="text-[10px] font-bold text-brand-muted uppercase tracking-widest flex items-center gap-1">
+                                     <Zap size={10} className="text-orange-500" />
+                                     Energy / Product Usage
+                                   </div>
+                                   <div className="text-sm font-semibold text-brand-secondary">{item.productUsage || 'Standard'}</div>
+                                 </div>
                                </div>
-                               <div className="space-y-1">
-                                 <div className="text-[10px] font-bold text-brand-muted uppercase tracking-widest flex items-center gap-1">
-                                   <Zap size={10} className="text-orange-500" />
-                                   Intensity
+
+                               <div className="space-y-4">
+                                 <div className="space-y-1">
+                                   <div className="text-[10px] font-bold text-brand-muted uppercase tracking-widest flex items-center gap-1">
+                                     <Tag size={10} className="text-brand-primary" />
+                                     Patient Acquisition Source
+                                   </div>
+                                   <div className="text-sm font-bold text-brand-secondary">
+                                     {clientDataMap[item.parentId!]?.source || 'Internal Database'}
+                                   </div>
                                  </div>
-                                 <div className="text-sm font-semibold text-brand-secondary">{item.productUsage || 'Standard'}</div>
+                                 <div className="space-y-1">
+                                   <div className="text-[10px] font-bold text-brand-muted uppercase tracking-widest flex items-center gap-1">
+                                     <MessageSquare size={10} className="text-blue-500" />
+                                     Primary Clinical Concern
+                                   </div>
+                                   <div className="text-sm font-semibold text-brand-secondary italic">
+                                     {clientDataMap[item.parentId!]?.concern || 'Routine Review'}
+                                   </div>
+                                 </div>
                                </div>
-                               <div className="space-y-1">
-                                 <div className="text-[10px] font-bold text-brand-muted uppercase tracking-widest flex items-center gap-1">
-                                   <Stethoscope size={10} className="text-brand-primary" />
-                                   Doctor
+
+                               <div className="space-y-4">
+                                 <div className="space-y-1">
+                                   <div className="text-[10px] font-bold text-brand-muted uppercase tracking-widest flex items-center gap-1">
+                                     <Stethoscope size={10} className="text-brand-primary" />
+                                     Practitioner in Charge
+                                   </div>
+                                   <div className="text-sm font-bold text-brand-secondary truncate">{item.doctorName || '--'}</div>
                                  </div>
-                                 <div className="text-sm font-bold text-brand-secondary truncate">{item.doctorName || '--'}</div>
-                               </div>
-                               <div className="space-y-1">
-                                 <div className="text-[10px] font-bold text-brand-muted uppercase tracking-widest flex items-center gap-1">
-                                   <Calendar size={10} className="text-brand-primary" />
-                                   Follow-up Date
-                                 </div>
-                                 <div className="text-sm font-bold text-brand-primary flex items-center gap-1">
-                                   {item.followUpDate?.toDate ? format(item.followUpDate.toDate(), 'MMMM d, yyyy') : 'No date'}
+                                 <div className="space-y-1">
+                                   <div className="text-[10px] font-bold text-brand-muted uppercase tracking-widest flex items-center gap-1">
+                                     <Calendar size={10} className="text-brand-primary" />
+                                     Next Scheduled Follow-up
+                                   </div>
+                                   <div className="text-sm font-bold text-brand-primary flex items-center gap-1">
+                                     {item.followUpDate?.toDate ? format(item.followUpDate.toDate(), 'MMMM d, yyyy') : 'No date'}
+                                   </div>
                                  </div>
                                </div>
                              </div>
 
-                             {/* Clinical Notes */}
+                             {/* Patient Context Notes */}
                              {item.notes && (
-                               <div className="bg-slate-50/80 rounded-xl p-4 mt-2">
-                                 <div className="text-[10px] font-bold text-brand-muted uppercase tracking-widest flex items-center gap-1 mb-2">
-                                   <StickyNote size={10} />
-                                   Clinical Notes
-                                 </div>
-                                 <p className="text-sm text-brand-secondary leading-relaxed italic">
-                                   "{item.notes}"
-                                 </p>
+                               <div className="bg-brand-primary/5 rounded-2xl p-5 border border-brand-primary/10 mt-2 relative overflow-hidden group/notes">
+                                  <div className="absolute top-0 right-0 w-24 h-24 bg-brand-primary/5 rounded-full -mr-12 -mt-12 transition-transform group-hover/notes:scale-110" />
+                                  <div className="text-[10px] font-bold text-brand-primary uppercase tracking-widest flex items-center gap-2 mb-3 relative">
+                                    <div className="p-1 px-1.5 bg-brand-primary text-white rounded">
+                                      <StickyNote size={10} />
+                                    </div>
+                                    Client Clinical History Note
+                                  </div>
+                                  <p className="text-sm text-brand-secondary leading-relaxed relative pl-2 border-l-2 border-brand-primary/20">
+                                    {item.notes}
+                                  </p>
                                </div>
                              )}
 
@@ -425,21 +753,60 @@ export default function App() {
                                 Open Patient Record
                               </button>
                               
-                              <div className="flex gap-2 w-full sm:w-auto">
-                                <a 
-                                  href={`tel:${(item.clientPhone || clientDataMap[item.parentId!]?.phone || '').replace(/\D/g, '')}`}
-                                  className="flex-1 sm:flex-none flex items-center justify-center gap-2 px-4 py-2 bg-white border border-brand-border rounded-lg text-xs font-bold text-brand-secondary hover:border-brand-primary/30 transition-all shadow-sm"
-                                >
-                                  <Phone size={14} />
-                                  Call
-                                </a>
-                                <button 
-                                  onClick={() => handleCompleteFollowUp(item.parentId!, item.id)}
-                                  className="flex-2 sm:flex-none flex items-center justify-center gap-2 px-4 py-2 bg-brand-primary text-white rounded-lg text-xs font-bold hover:bg-blue-700 transition-all shadow-md shadow-brand-primary/10"
-                                >
-                                  <CheckCircle2 size={14} />
-                                  Complete Follow-up
-                                </button>
+                              <div className="flex gap-2 w-full sm:w-auto items-center">
+                                <AnimatePresence mode="wait">
+                                  {confirmingDeleteId === item.id ? (
+                                    <motion.div 
+                                      initial={{ x: 10, opacity: 0 }}
+                                      animate={{ x: 0, opacity: 1 }}
+                                      exit={{ x: 10, opacity: 0 }}
+                                      className="flex items-center gap-1.5"
+                                    >
+                                      <button
+                                        onClick={() => handleDeleteTreatmentRecord(item.parentId!, item.id)}
+                                        className="text-[10px] font-bold text-red-600 bg-red-50 hover:bg-red-100 px-3 py-1.5 rounded-lg transition-colors border border-red-100 uppercase tracking-widest"
+                                      >
+                                        Confirm Delete
+                                      </button>
+                                      <button
+                                        onClick={() => setConfirmingDeleteId(null)}
+                                        className="text-[10px] font-bold text-brand-muted hover:text-brand-secondary px-3 py-1.5 rounded-lg border border-slate-100 uppercase tracking-widest"
+                                      >
+                                        Cancel
+                                      </button>
+                                    </motion.div>
+                                  ) : (
+                                    <>
+                                      <button 
+                                        onClick={() => setRescheduleData({ type: 'followup', data: item })}
+                                        className="flex-1 sm:flex-none flex items-center justify-center gap-2 px-4 py-2 bg-white border border-brand-border rounded-lg text-xs font-bold text-brand-secondary hover:border-brand-primary/30 transition-all shadow-sm"
+                                      >
+                                        <RefreshCw size={14} /> Reschedule
+                                      </button>
+                                      <a 
+                                        href={`tel:${(item.clientPhone || clientDataMap[item.parentId!]?.phone || '').replace(/\D/g, '')}`}
+                                        className="flex-1 sm:flex-none flex items-center justify-center gap-2 px-4 py-2 bg-white border border-brand-border rounded-lg text-xs font-bold text-brand-secondary hover:border-brand-primary/30 transition-all shadow-sm"
+                                      >
+                                        <Phone size={14} />
+                                        Call
+                                      </a>
+                                      <button 
+                                        onClick={() => handleCompleteFollowUp(item.parentId!, item.id)}
+                                        className="flex-1 sm:flex-none flex items-center justify-center gap-2 px-4 py-2 bg-[#2ecc71] text-white rounded-lg text-xs font-bold hover:bg-[#27ae60] transition-all shadow-md shadow-emerald-500/10"
+                                      >
+                                        <CheckCircle2 size={14} />
+                                        Complete
+                                      </button>
+                                      <button 
+                                        onClick={() => setConfirmingDeleteId(item.id)}
+                                        className="p-2 text-brand-muted hover:text-red-500 transition-colors"
+                                        title="Delete Record"
+                                      >
+                                        <Trash2 size={18} />
+                                      </button>
+                                    </>
+                                  )}
+                                </AnimatePresence>
                               </div>
                            </div>
                          </motion.div>
@@ -465,12 +832,27 @@ export default function App() {
                   exit={{ opacity: 0 }}
                 >
                   <DashboardView 
-                    stats={stats}
+                    stats={{
+                      ...stats,
+                      followUpsDue: stats.followUpsDue + stats.leadsDue
+                    }}
                     recentTreatments={recentTreatments}
                     onNewPatient={() => setIsFormOpen(true)}
                     onViewNotifications={() => setView('notifications')}
                     onSelectPatient={handleSelectClientById}
+                    onDeleteTreatment={handleDeleteTreatmentRecord}
+                    confirmingDeleteId={confirmingDeleteId}
+                    setConfirmingDeleteId={setConfirmingDeleteId}
                   />
+                </motion.div>
+              ) : view === 'leads' ? (
+                <motion.div
+                  key="leads"
+                  initial={{ opacity: 0, y: 20 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  exit={{ opacity: 0, y: -20 }}
+                >
+                  <LeadDashboard userId={user.uid} />
                 </motion.div>
               ) : (
                 <motion.div
@@ -484,6 +866,7 @@ export default function App() {
                     userId={user.uid} 
                     onSelectClient={setSelectedClient} 
                     onNewClient={() => setIsFormOpen(true)}
+                    onRescheduleClient={handleRescheduleClient}
                   />
                 </motion.div>
               )}
@@ -497,6 +880,17 @@ export default function App() {
             userId={user.uid} 
             onClose={() => setIsFormOpen(false)} 
             onSaved={handleClientSaved} 
+          />
+        )}
+
+        {rescheduleData && user && (
+          <RescheduleModal
+            isOpen={true}
+            onClose={() => setRescheduleData(null)}
+            type={rescheduleData.type}
+            data={rescheduleData.data}
+            userId={user.uid}
+            onSuccess={() => {}}
           />
         )}
       </main>
@@ -514,6 +908,18 @@ export default function App() {
               <LayoutDashboard size={20} />
             </div>
             <span className="text-[10px] font-bold uppercase tracking-wider">Home</span>
+          </button>
+
+          <button 
+            onClick={() => handleNavClick('leads')}
+            className={`flex flex-col items-center gap-1 flex-1 transition-all ${
+              view === 'leads' ? 'text-emerald-600' : 'text-brand-muted'
+            }`}
+          >
+            <div className={`p-1 rounded-lg ${view === 'leads' ? 'bg-emerald-50' : ''}`}>
+              <Phone size={20} />
+            </div>
+            <span className="text-[10px] font-bold uppercase tracking-wider">Inquiry</span>
           </button>
           
           <button 

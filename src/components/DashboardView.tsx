@@ -1,6 +1,6 @@
 import React from 'react';
-import { motion } from 'motion/react';
-import { Activity, Users, Calendar, TrendingUp, Clock, ChevronRight, Plus, History, Stethoscope } from 'lucide-react';
+import { motion, AnimatePresence } from 'motion/react';
+import { Activity, Users, Calendar, TrendingUp, Clock, ChevronRight, Plus, History, Stethoscope, Trash2 } from 'lucide-react';
 import { format } from 'date-fns';
 
 interface DashboardViewProps {
@@ -12,9 +12,12 @@ interface DashboardViewProps {
   onNewPatient: () => void;
   onViewNotifications: () => void;
   onSelectPatient: (id: string) => void;
+  onDeleteTreatment: (clientId: string, treatmentId: string) => void;
+  confirmingDeleteId: string | null;
+  setConfirmingDeleteId: (id: string | null) => void;
 }
 
-export default function DashboardView({ stats, recentTreatments, onNewPatient, onViewNotifications, onSelectPatient }: DashboardViewProps) {
+export default function DashboardView({ stats, recentTreatments, onNewPatient, onViewNotifications, onSelectPatient, onDeleteTreatment, confirmingDeleteId, setConfirmingDeleteId }: DashboardViewProps) {
   const today = format(new Date(), 'EEEE, MMMM do');
 
   return (
@@ -111,7 +114,45 @@ export default function DashboardView({ stats, recentTreatments, onNewPatient, o
                       </div>
                     </div>
                     <div className="flex items-center gap-2 sm:gap-3 flex-shrink-0">
-                       <span className="text-[9px] sm:text-[10px] font-bold text-brand-muted uppercase tracking-wider bg-slate-100 px-2 py-0.5 rounded">Log</span>
+                      <AnimatePresence mode="wait">
+                        {confirmingDeleteId === treatment.id ? (
+                          <motion.div 
+                            initial={{ x: 10, opacity: 0 }}
+                            animate={{ x: 0, opacity: 1 }}
+                            exit={{ x: 10, opacity: 0 }}
+                            className="flex items-center gap-1"
+                            onClick={(e) => e.stopPropagation()}
+                          >
+                            <button
+                              onClick={() => {
+                                if (treatment.parentId) {
+                                  onDeleteTreatment(treatment.parentId, treatment.id);
+                                }
+                              }}
+                              className="text-[10px] font-bold text-red-600 bg-red-50 hover:bg-red-100 px-2 py-1 rounded transition-colors border border-red-100"
+                            >
+                              Del
+                            </button>
+                            <button
+                              onClick={() => setConfirmingDeleteId(null)}
+                              className="text-[10px] font-bold text-brand-muted hover:text-brand-secondary px-2 py-1"
+                            >
+                              No
+                            </button>
+                          </motion.div>
+                        ) : (
+                          <button
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              setConfirmingDeleteId(treatment.id);
+                            }}
+                            className="p-2 text-brand-muted hover:text-red-500 transition-colors"
+                            title="Delete Log"
+                          >
+                            <Trash2 size={16} />
+                          </button>
+                        )}
+                      </AnimatePresence>
                     </div>
                   </motion.div>
                 ))}
