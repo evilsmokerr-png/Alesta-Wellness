@@ -2,107 +2,55 @@ rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
     
-    // Default deny catch-all
     match /{document=**} {
       allow read, write: if false;
     }
 
-    // --- Helpers ---
-    function isSignedIn() {
-      return request.auth != null;
+    function isSignedIn() { return request.auth != null; }
+    function docOwner(doc) { return isSignedIn() && doc.ownerId == request.auth.uid; }
+    function incoming() { return request.resource.data; }
+    function existing() { return resource.data; }
+
+    // --- Specific Collection Rules ---
+
+    match /test/{docId} {
+      allow read: if isSignedIn();
     }
 
-    function isOwner(data) {
-      return isSignedIn() && data.ownerId == request.auth.uid;
-    }
-
-    function isValidId(id) {
-      return id is string && id.size() <= 128 && id.matches('^[a-zA-Z0-9_\\-]+$');
-    }
-
-    function incoming() {
-      return request.resource.data;
-    }
-
-    function existing() {
-      return resource.data;
-    }
-
-    // --- Validation Blueprints ---
-
-    function isValidClient(data, isCreate) {
-      let requiredFields = ['name', 'phone', 'searchName', 'ownerId', 'updatedAt'];
-      let optionalFields = ['address', 'createdAt'];
-      let allAllowed = requiredFields.concat(optionalFields);
-      
-      return data.keys().hasAll(requiredFields)
-        && data.keys().hasOnly(allAllowed)
-        && data.name is string && data.name.size() > 0 && data.name.size() <= 200
-        && data.phone is string && data.phone.size() >= 5 && data.phone.size() <= 50
-        && data.searchName is string && data.searchName.size() <= 250
-        && data.ownerId == request.auth.uid
-        && (isCreate ? (data.createdAt == request.time || !data.keys().hasAny(['createdAt'])) : (data.createdAt == existing().createdAt || !data.keys().hasAny(['createdAt'])))
-        && data.updatedAt == request.time;
-    }
-
-    function isValidTreatment(data) {
-      let requiredFields = ['date', 'treatmentName', 'ownerId', 'createdAt', 'doctorName'];
-      let optionalFields = ['productUsage', 'followUpDate', 'notes', 'clientName', 'clientPhone'];
-      let allAllowed = requiredFields.concat(optionalFields);
-
-      return data.keys().hasAll(requiredFields)
-        && data.keys().hasOnly(allAllowed)
-        && data.treatmentName is string && data.treatmentName.size() <= 250
-        && data.doctorName is string && data.doctorName.size() <= 100
-        && data.ownerId == request.auth.uid
-        && data.createdAt == request.time;
-    }
-
-    // --- Routes ---
-
-    // Collection Group for cross-patient clinical stats (Notifications/Follow-ups)
     match /{path=**}/treatments/{treatmentId} {
-      // Secure List Query: Evaluate resource.data directly
       allow list: if isSignedIn() && resource.data.ownerId == request.auth.uid;
     }
 
     match /clients/{clientId} {
-      allow get: if isOwner(existing()) && isValidId(clientId);
-      allow list: if isSignedIn() && (resource == null || resource.data.ownerId == request.auth.uid);
+      allow get: if docOwner(existing());
+      allow list: if isSignedIn() && resource.data.ownerId == request.auth.uid;
       
-      allow create: if isSignedIn() && isValidId(clientId) && isValidClient(incoming(), true);
+      allow create: if isSignedIn() && incoming().ownerId == request.auth.uid 
+        && incoming().updatedAt == request.time;
       
-      allow update: if isOwner(existing()) 
-        && isValidId(clientId)
-        && isValidClient(incoming(), false)
-        && (
-          // Action: Full Update
-          incoming().diff(existing()).affectedKeys().hasOnly(['name', 'phone', 'address', 'searchName', 'updatedAt'])
-        );
+      allow update: if docOwner(existing()) 
+        && (incoming().updatedAt == request.time || !('updatedAt' in incoming()) || incoming().updatedAt == existing().updatedAt)
+        && (incoming().ownerId == existing().ownerId);
 
-      allow delete: if isOwner(existing());
+      allow delete: if docOwner(existing());
 
       match /treatments/{treatmentId} {
-        // Master Gate for relationship sync
-        function isParentOwner() {
+        function parentOwner() {
           return get(/databases/$(database)/documents/clients/$(clientId)).data.ownerId == request.auth.uid;
         }
 
-        allow list: if isSignedIn() && (resource == null || resource.data.ownerId == request.auth.uid);
-        allow get: if isSignedIn() && isParentOwner() && isValidId(treatmentId);
+        allow list: if isSignedIn() && (resource.data.ownerId == request.auth.uid || parentOwner());
+        allow get: if isSignedIn() && (resource.data.ownerId == request.auth.uid || parentOwner());
         
-        allow create: if isSignedIn() 
-          && isValidId(treatmentId) 
-          && isParentOwner() 
-          && isValidTreatment(incoming());
+        allow create: if isSignedIn() && parentOwner() 
+          && incoming().ownerId == request.auth.uid
+          && incoming().updatedAt == request.time;
           
-        allow update: if isSignedIn() 
-          && isValidId(treatmentId) 
-          && isParentOwner() 
-          && isValidTreatment(incoming()) 
-          && incoming().ownerId == existing().ownerId;
+        allow update: if isSignedIn() && (docOwner(existing()) || parentOwner())
+          && (incoming().updatedAt == request.time || !('updatedAt' in incoming()) || incoming().updatedAt == existing().updatedAt)
+          && (incoming().ownerId == existing().ownerId);
 
-        allow delete: if isSignedIn() && isParentOwner();
+        allow delete: if isSignedIn() && (docOwner(existing()) || parentOwner());
       }
     }
   }

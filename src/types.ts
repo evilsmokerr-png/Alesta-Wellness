@@ -19,4 +19,5 @@ export interface Treatment {
   followUpDate: any;
   notes?: string;
   createdAt: any;
+  updatedAt?: any;
 }

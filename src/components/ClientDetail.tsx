@@ -74,6 +74,7 @@ export default function ClientDetail({ userId, client, onBack, onUpdate }: Clien
         date: new Date(newTreatment.date),
         followUpDate: newTreatment.followUpDate ? new Date(newTreatment.followUpDate) : null,
         createdAt: serverTimestamp(),
+        updatedAt: serverTimestamp(),
       };
 
       const treatmentRef = await addDoc(collection(db, 'clients', client.id!, 'treatments'), treatmentData);
@@ -88,6 +89,7 @@ export default function ClientDetail({ userId, client, onBack, onUpdate }: Clien
         id: treatmentRef.id,
         ...treatmentData,
         createdAt: new Date(),
+        updatedAt: new Date(),
         // Ensure dates are objects for the local list
         date: treatmentData.date,
         followUpDate: treatmentData.followUpDate

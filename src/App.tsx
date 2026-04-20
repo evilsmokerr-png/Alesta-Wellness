@@ -3,7 +3,7 @@ import { User } from 'firebase/auth';
 import { Leaf, Users, LayoutDashboard, Bell, Activity, Calendar, ChevronRight, Phone, Zap, StickyNote, CheckCircle2, MapPin, Stethoscope } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { db } from './lib/firebase';
-import { collectionGroup, query, where, onSnapshot, orderBy, limit, doc, getDoc, updateDoc } from 'firebase/firestore';
+import { collectionGroup, query, where, onSnapshot, orderBy, limit, doc, getDoc, updateDoc, serverTimestamp } from 'firebase/firestore';
 import { startOfDay, endOfDay, startOfMonth, endOfMonth, format } from 'date-fns';
 import Auth from './components/Auth';
 import DashboardView from './components/DashboardView';
@@ -11,6 +11,7 @@ import ClientDashboard from './components/ClientDashboard';
 import ClientDetail from './components/ClientDetail';
 import ClientForm from './components/ClientForm';
 import { Client } from './types';
+import { handleFirestoreError } from './lib/errorHandlers';
 
 type ViewType = 'dashboard' | 'clients' | 'notifications';
 
@@ -133,10 +134,12 @@ export default function App() {
     try {
       const treatmentRef = doc(db, 'clients', clientId, 'treatments', treatmentId);
       await updateDoc(treatmentRef, {
-        followUpDate: null
+        followUpDate: null,
+        updatedAt: serverTimestamp()
       });
     } catch (error) {
-      console.error("Error completing follow-up:", error);
+      const msg = handleFirestoreError(error, 'update', `clients/${clientId}/treatments/${treatmentId}`);
+      alert(msg);
     }
   };
 
