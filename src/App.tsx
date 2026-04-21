@@ -3,7 +3,7 @@ import { User } from 'firebase/auth';
 import { Leaf, Users, LayoutDashboard, Bell, Activity, Calendar, ChevronRight, Phone, Zap, StickyNote, CheckCircle2, MapPin, Stethoscope, Tag, MessageSquare, AlertTriangle, RefreshCw, Trash2, Clock, History } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { db } from './lib/firebase';
-import { collection, collectionGroup, query, where, onSnapshot, orderBy, limit, doc, getDoc, getDocs, updateDoc, deleteDoc, serverTimestamp } from 'firebase/firestore';
+import { collection, collectionGroup, query, where, onSnapshot, orderBy, limit, doc, getDoc, getDocs, updateDoc, deleteDoc, serverTimestamp, addDoc } from 'firebase/firestore';
 import { startOfDay, endOfDay, startOfMonth, endOfMonth, format, isToday, addDays, isBefore } from 'date-fns';
 import Auth from './components/Auth';
 import DashboardView from './components/DashboardView';
@@ -30,7 +30,10 @@ export default function App() {
     leadsDue: 0
   });
   const [followUpList, setFollowUpList] = useState<any[]>([]);
+  const [treatmentsTodayList, setTreatmentsTodayList] = useState<any[]>([]);
   const [leadsDueList, setLeadsDueList] = useState<Lead[]>([]);
+  const [upcomingFollowUpsList, setUpcomingFollowUpsList] = useState<any[]>([]);
+  const [upcomingLeadsList, setUpcomingLeadsList] = useState<Lead[]>([]);
   const [clientDataMap, setClientDataMap] = useState<Record<string, Client>>({});
   const [recentTreatments, setRecentTreatments] = useState<any[]>([]);
 
@@ -61,6 +64,26 @@ export default function App() {
 
     const unsubTreatments = onSnapshot(treatmentsTodayQuery, (snapshot) => {
       setStats(prev => ({ ...prev, treatmentsToday: snapshot.size }));
+      const list = snapshot.docs.map(doc => ({
+        id: doc.id,
+        parentId: doc.ref.parent.parent?.id,
+        ...doc.data()
+      }));
+      setTreatmentsTodayList(list);
+
+      // Fetch client data for items that don't have them denormalized
+      list.forEach(async (item: any) => {
+        if (item.parentId && !clientDataMap[item.parentId]) {
+          const cDoc = await getDoc(doc(db, 'clients', item.parentId));
+          if (cDoc.exists()) {
+            const data = cDoc.data() as Client;
+            setClientDataMap(prev => ({
+              ...prev,
+              [item.parentId!]: { ...data, id: cDoc.id }
+            }));
+          }
+        }
+      });
     });
 
     // 2. Follow-ups Due & Notification List
@@ -135,12 +158,41 @@ export default function App() {
       setStats(prev => ({ ...prev, leadsDue: snapshot.size }));
     });
 
+    // 7. Strictly Future Follow-ups (Upcoming)
+    const futureFollowUpsQuery = query(
+      collectionGroup(db, 'treatments'),
+      where('ownerId', '==', user.uid),
+      where('followUpDate', '>', todayEnd),
+      orderBy('followUpDate', 'asc')
+    );
+    const unsubFutureFollowUps = onSnapshot(futureFollowUpsQuery, (snapshot) => {
+      setUpcomingFollowUpsList(snapshot.docs.map(doc => ({ 
+        id: doc.id, 
+        parentId: doc.ref.parent.parent?.id,
+        ...doc.data() 
+      })));
+    });
+
+    // 8. Strictly Future Leads (Upcoming)
+    const futureLeadsQuery = query(
+      collection(db, 'leads'),
+      where('ownerId', '==', user.uid),
+      where('appointmentDate', '>', todayEnd),
+      where('status', 'in', ['enquiry', 'appointment_set']),
+      orderBy('appointmentDate', 'asc')
+    );
+    const unsubFutureLeads = onSnapshot(futureLeadsQuery, (snapshot) => {
+      setUpcomingLeadsList(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Lead)));
+    });
+
     return () => {
       unsubTreatments();
       unsubFollowUps();
       unsubRecent();
       unsubLeadsCount();
       unsubLeadsDue();
+      unsubFutureFollowUps();
+      unsubFutureLeads();
     };
   }, [user]);
 
@@ -195,11 +247,52 @@ export default function App() {
   };
 
   const handleMarkLeadVisited = async (leadId: string) => {
+    if (!user) return;
     try {
-      await updateDoc(doc(db, 'leads', leadId), {
+      const leadRef = doc(db, 'leads', leadId);
+      const leadSnap = await getDoc(leadRef);
+      if (!leadSnap.exists()) return;
+      const leadData = leadSnap.data() as Lead;
+
+      // 1. Update Lead Status
+      await updateDoc(leadRef, {
         status: 'visited',
         updatedAt: serverTimestamp()
       });
+
+      // 2. Find or Create Client
+      let targetClient: Client | null = null;
+      const clientsRef = collection(db, 'clients');
+      const q = query(clientsRef, 
+        where('ownerId', '==', user.uid), 
+        where('phone', '==', leadData.phone)
+      );
+      const querySnapshot = await getDocs(q);
+
+      if (!querySnapshot.empty) {
+        const d = querySnapshot.docs[0];
+        targetClient = { id: d.id, ...d.data() } as Client;
+      } else {
+        const clientData = {
+          name: leadData.name,
+          phone: leadData.phone,
+          address: '',
+          source: leadData.source || '',
+          concern: leadData.concern || '',
+          searchName: leadData.name.toLowerCase(),
+          ownerId: user.uid,
+          createdAt: serverTimestamp(),
+          updatedAt: serverTimestamp()
+        };
+        const newClientRef = await addDoc(clientsRef, clientData);
+        targetClient = { id: newClientRef.id, ...clientData } as Client;
+      }
+
+      // 3. Open the client record directly
+      if (targetClient) {
+        setSelectedClient(targetClient);
+      }
+
     } catch (error) {
       const msg = handleFirestoreError(error, 'update', `leads/${leadId}`);
       alert(msg);
@@ -402,11 +495,120 @@ export default function App() {
                        <p className="text-brand-muted text-xs sm:text-sm mt-1">Directly manage patient interactions and clinical outcomes.</p>
                      </div>
                      <div className="bg-brand-primary text-white text-xs font-bold px-3 py-1 rounded-full shadow-lg shadow-brand-primary/20">
-                       {followUpList.length + leadsDueList.length} Due
+                       {followUpList.length + leadsDueList.length + treatmentsTodayList.length} Total
                      </div>
                    </div>
-                   
-                   {leadsDueList.length > 0 && (
+
+                   {treatmentsTodayList.length > 0 && (
+                     <div className="space-y-4 pt-2">
+                       <div className="flex items-center gap-2 px-2 text-brand-primary">
+                         <Activity size={18} />
+                         <h3 className="font-bold text-sm uppercase tracking-widest">Clinical Activity (Today)</h3>
+                       </div>
+                       {treatmentsTodayList.map((treatment, idx) => {
+                         const clientName = treatment.clientName || clientDataMap[treatment.parentId!]?.name || 'Unknown Patient';
+                         const clientPhone = treatment.clientPhone || clientDataMap[treatment.parentId!]?.phone || 'No Phone';
+                         
+                         return (
+                           <motion.div 
+                             key={treatment.id}
+                             initial={{ opacity: 0, y: 10 }}
+                             animate={{ opacity: 1, y: 0 }}
+                             transition={{ delay: idx * 0.05 }}
+                             className="bg-white rounded-2xl border border-brand-primary/20 overflow-hidden shadow-sm hover:shadow-md transition-all group"
+                           >
+                             <div className="p-4 sm:p-6 space-y-4">
+                               <div className="flex items-start justify-between border-b border-slate-50 pb-4">
+                                 <div className="flex items-center gap-4">
+                                   <div className="w-10 h-10 sm:w-12 sm:h-12 rounded-2xl bg-blue-50 text-brand-primary flex items-center justify-center border border-blue-100 flex-shrink-0">
+                                      <Stethoscope size={24} />
+                                   </div>
+                                   <div className="min-w-0">
+                                     <div className="text-base sm:text-lg font-bold text-brand-secondary leading-tight truncate uppercase tracking-tighter">
+                                       {treatment.treatmentName}
+                                     </div>
+                                     <div className="flex flex-wrap items-center gap-x-3 gap-y-1 mt-1">
+                                       <span className="text-xs font-bold text-brand-secondary flex items-center gap-1">
+                                         <Users size={12} className="text-brand-muted" /> {clientName}
+                                       </span>
+                                       <span className="text-xs font-medium text-brand-muted flex items-center gap-1.5">
+                                         <Phone size={12} /> {clientPhone}
+                                       </span>
+                                       <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-emerald-50 text-emerald-600 border border-emerald-100 uppercase tracking-widest">
+                                         Completed
+                                       </span>
+                                     </div>
+                                   </div>
+                                 </div>
+                                 <div className="hidden sm:flex flex-col items-end">
+                                   <div className="text-[10px] font-bold text-brand-muted uppercase tracking-widest mb-1 font-mono">Timestamp</div>
+                                   <div className="text-xs font-bold px-2 py-1 rounded bg-slate-50 text-brand-secondary">
+                                     {treatment.date?.toDate ? format(treatment.date.toDate(), 'h:mm a') : 'Now'}
+                                   </div>
+                                 </div>
+                               </div>
+
+                               <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                                  <div className="space-y-1">
+                                    <div className="text-[10px] font-bold text-brand-muted uppercase tracking-widest flex items-center gap-1">
+                                      <Zap size={10} className="text-yellow-500" />
+                                      Intensity / Parameters
+                                    </div>
+                                    <div className="text-sm font-bold text-brand-secondary">{treatment.productUsage || 'Standard Protocol'}</div>
+                                  </div>
+                                  <div className="space-y-1">
+                                    <div className="text-[10px] font-bold text-brand-muted uppercase tracking-widest flex items-center gap-1">
+                                      <Stethoscope size={10} className="text-brand-primary" />
+                                      Attending Doctor
+                                    </div>
+                                    <div className="text-sm font-semibold text-brand-secondary">{treatment.doctorName || 'Dr. Consultant'}</div>
+                                  </div>
+                                  <div className="space-y-1">
+                                    <div className="text-[10px] font-bold text-brand-muted uppercase tracking-widest flex items-center gap-1">
+                                      <Calendar size={10} className="text-orange-500" />
+                                      Follow-up Scheduled
+                                    </div>
+                                    <div className="text-sm font-bold text-brand-secondary italic">
+                                      {treatment.followUpDate ? format(treatment.followUpDate.toDate ? treatment.followUpDate.toDate() : new Date(treatment.followUpDate), 'MMM d, yyyy') : 'No Follow-up'}
+                                    </div>
+                                  </div>
+                               </div>
+
+                               {treatment.notes && (
+                                 <div className="bg-slate-50 rounded-2xl p-5 border border-slate-100 mt-2">
+                                   <div className="text-[10px] font-bold text-brand-muted uppercase tracking-widest flex items-center gap-2 mb-3">
+                                     <StickyNote size={12} className="text-brand-primary" />
+                                     Clinical Observations
+                                   </div>
+                                   <p className="text-sm text-brand-secondary leading-relaxed border-l-2 border-brand-primary/20 pl-4 py-1 italic">
+                                     "{treatment.notes}"
+                                   </p>
+                                 </div>
+                               )}
+                               
+                               <div className="flex justify-end gap-3 pt-2">
+                                  <button 
+                                    onClick={() => treatment.parentId && handleSelectClientById(treatment.parentId)}
+                                    className="flex items-center gap-2 px-6 py-2.5 bg-brand-primary text-white rounded-xl text-xs font-bold hover:bg-brand-primary/90 transition-all shadow-lg shadow-brand-primary/10"
+                                  >
+                                    View Full Patient History
+                                  </button>
+                                  <button 
+                                    onClick={() => setConfirmingDeleteId(treatment.id)}
+                                    className="p-2 text-brand-muted hover:text-red-500 transition-colors"
+                                    title="Delete Record"
+                                  >
+                                    <Trash2 size={18} />
+                                  </button>
+                               </div>
+                             </div>
+                           </motion.div>
+                         );
+                       })}
+                     </div>
+                  )}
+                  
+                  {leadsDueList.length > 0 && (
                      <div className="space-y-4">
                        <div className="flex items-center gap-2 px-2 text-[#2ecc71]">
                          <Bell size={18} />
@@ -837,10 +1039,15 @@ export default function App() {
                       followUpsDue: stats.followUpsDue + stats.leadsDue
                     }}
                     recentTreatments={recentTreatments}
+                    upcomingFollowUps={upcomingFollowUpsList}
+                    upcomingInquiries={upcomingLeadsList}
+                    clientDataMap={clientDataMap}
                     onNewPatient={() => setIsFormOpen(true)}
                     onViewNotifications={() => setView('notifications')}
+                    onViewTreatmentsToday={() => setView('notifications')}
                     onSelectPatient={handleSelectClientById}
                     onDeleteTreatment={handleDeleteTreatmentRecord}
+                    onMarkLeadVisited={handleMarkLeadVisited}
                     confirmingDeleteId={confirmingDeleteId}
                     setConfirmingDeleteId={setConfirmingDeleteId}
                   />
@@ -852,7 +1059,7 @@ export default function App() {
                   animate={{ opacity: 1, y: 0 }}
                   exit={{ opacity: 0, y: -20 }}
                 >
-                  <LeadDashboard userId={user.uid} />
+                  <LeadDashboard userId={user.uid} onMarkVisited={handleMarkLeadVisited} />
                 </motion.div>
               ) : (
                 <motion.div

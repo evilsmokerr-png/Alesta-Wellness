@@ -233,6 +233,18 @@ export default function ClientDetail({ userId, client, onBack, onUpdate }: Clien
               value={newTreatment.treatmentName}
               onChange={(e) => setNewTreatment({ ...newTreatment, treatmentName: e.target.value })}
             />
+            <div className="flex flex-wrap gap-1.5 mt-1.5 px-0.5">
+              {['Doctor Consultation', 'Laser Treatment', 'HydraFacial', 'Chemical Peel'].map(name => (
+                <button
+                  key={name}
+                  type="button"
+                  onClick={() => setNewTreatment(prev => ({ ...prev, treatmentName: name }))}
+                  className="text-[9px] font-bold px-2 py-1 rounded-lg border border-brand-border bg-white text-brand-muted hover:border-brand-primary hover:text-brand-primary transition-all uppercase tracking-tighter"
+                >
+                  {name}
+                </button>
+              ))}
+            </div>
           </div>
           <div className="w-full sm:flex-1 min-w-0 sm:min-w-[200px] space-y-1.5">
             <label className="text-[10px] font-bold text-brand-muted uppercase tracking-widest block ml-1">Intensity / Level</label>

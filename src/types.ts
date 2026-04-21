@@ -3,6 +3,8 @@ export interface Client {
   name: string;
   phone: string;
   address: string;
+  source?: string;
+  concern?: string;
   searchName: string;
   ownerId: string;
   createdAt: any;

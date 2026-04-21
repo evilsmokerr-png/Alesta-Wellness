@@ -9,15 +9,16 @@ import LeadForm from './LeadForm';
 
 interface LeadDashboardProps {
   userId: string;
+  onMarkVisited: (leadId: string) => void;
 }
 
-export default function LeadDashboard({ userId }: LeadDashboardProps) {
+export default function LeadDashboard({ userId, onMarkVisited }: LeadDashboardProps) {
   const [searchTerm, setSearchTerm] = useState('');
   const [leads, setLeads] = useState<Lead[]>([]);
   const [loading, setLoading] = useState(true);
   const [isFormOpen, setIsFormOpen] = useState(false);
   const [selectedLead, setSelectedLead] = useState<Lead | undefined>();
-  const [filter, setFilter] = useState<'all' | 'today' | 'no_show' | 'pending'>('all');
+  const [filter, setFilter] = useState<'all' | 'today' | 'no_show' | 'pending' | 'visited'>('all');
   const [confirmingDeleteId, setConfirmingDeleteId] = useState<string | null>(null);
 
   useEffect(() => {
@@ -53,7 +54,10 @@ export default function LeadDashboard({ userId }: LeadDashboardProps) {
     if (filter === 'today') return isToday(apptDate);
     if (filter === 'no_show') return lead.status === 'no_show' || (isPast(apptDate) && !isToday(apptDate) && lead.status === 'appointment_set');
     if (filter === 'pending') return lead.status === 'enquiry' || lead.status === 'appointment_set';
+    if (filter === 'visited') return lead.status === 'visited';
     
+    // By default for 'all', we might want to exclude visited/no-shows if user wants a clean board, 
+    // but usually 'all' means all. Let's keep it as all for now.
     return true;
   });
 
@@ -77,16 +81,20 @@ export default function LeadDashboard({ userId }: LeadDashboardProps) {
     }
   };
 
-  const handleMarkVisited = async (e: React.MouseEvent, id: string) => {
+  const handleMarkVisitedClick = (e: React.MouseEvent, id: string) => {
     e.stopPropagation();
-    try {
-      await updateDoc(doc(db, 'leads', id), {
-        status: 'visited',
-        updatedAt: serverTimestamp()
-      });
-    } catch (err) {
-      console.error("Error updating lead status:", err);
-    }
+    onMarkVisited(id);
+  };
+
+  const counts = {
+    all: leads.length,
+    today: leads.filter(l => {
+      const d = l.appointmentDate?.toDate ? l.appointmentDate.toDate() : new Date(l.appointmentDate);
+      return isToday(d);
+    }).length,
+    pending: leads.filter(l => l.status === 'enquiry' || l.status === 'appointment_set').length,
+    visited: leads.filter(l => l.status === 'visited').length,
+    no_show: leads.filter(l => l.status === 'no_show' || (isPast(l.appointmentDate?.toDate ? l.appointmentDate.toDate() : new Date(l.appointmentDate)) && !isToday(l.appointmentDate?.toDate ? l.appointmentDate.toDate() : new Date(l.appointmentDate)) && l.status === 'appointment_set')).length,
   };
 
   return (
@@ -107,12 +115,13 @@ export default function LeadDashboard({ userId }: LeadDashboardProps) {
       </div>
 
       {/* Stats Quick Filter */}
-      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+      <div className="grid grid-cols-2 sm:grid-cols-5 gap-3">
         {[
-          { id: 'all', label: 'All Entries', icon: ClipboardList, color: 'text-slate-600', bg: 'bg-slate-50' },
+          { id: 'all', label: 'All', icon: ClipboardList, color: 'text-slate-600', bg: 'bg-slate-50' },
           { id: 'today', label: 'Today', icon: Clock, color: 'text-blue-600', bg: 'bg-blue-50' },
-          { id: 'no_show', label: 'No Shows', icon: AlertTriangle, color: 'text-red-600', bg: 'bg-red-50' },
           { id: 'pending', label: 'Pending', icon: Calendar, color: 'text-orange-600', bg: 'bg-orange-50' },
+          { id: 'visited', label: 'Visited', icon: CheckCircle2, color: 'text-emerald-600', bg: 'bg-emerald-50' },
+          { id: 'no_show', label: 'No Shows', icon: AlertTriangle, color: 'text-red-600', bg: 'bg-red-50' },
         ].map((item) => (
           <button
             key={item.id}
@@ -123,8 +132,13 @@ export default function LeadDashboard({ userId }: LeadDashboardProps) {
                 : 'bg-white border-brand-border hover:bg-slate-50'
             }`}
           >
-            <div className={`w-8 h-8 ${item.bg} ${item.color} rounded-lg flex items-center justify-center`}>
+            <div className={`w-8 h-8 ${item.bg} ${item.color} rounded-lg flex items-center justify-center relative`}>
               <item.icon size={16} />
+              {(counts as any)[item.id] > 0 && (
+                <span className="absolute -top-1.5 -right-1.5 min-w-[16px] h-4 flex items-center justify-center bg-white border border-slate-100 rounded-full text-[9px] font-black shadow-sm px-1">
+                  {(counts as any)[item.id]}
+                </span>
+              )}
             </div>
             <span className="text-[10px] font-bold uppercase tracking-widest text-brand-muted">{item.label}</span>
           </button>
@@ -237,7 +251,7 @@ export default function LeadDashboard({ userId }: LeadDashboardProps) {
                               <Phone size={18} />
                             </a>
                             <button
-                              onClick={(e) => handleMarkVisited(e, lead.id!)}
+                              onClick={(e) => handleMarkVisitedClick(e, lead.id!)}
                               className="p-2.5 bg-emerald-50 text-emerald-600 rounded-xl hover:bg-emerald-100 transition-colors hidden sm:flex"
                               title="Mark as Visited"
                             >
