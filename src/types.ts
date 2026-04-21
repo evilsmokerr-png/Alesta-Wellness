@@ -25,6 +25,22 @@ export interface Lead {
   updatedAt: any;
 }
 
+export interface ProductEntry {
+  name: string;
+  qty: number;
+  mrp: number;
+  discount: number;
+  discountType: 'percentage' | 'fixed';
+}
+
+export interface ServiceEntry {
+  name: string;
+  mrp: number;
+  discount: number;
+  discountType: 'percentage' | 'fixed';
+  productUsage?: string;
+}
+
 export interface Treatment {
   id?: string;
   date: any;
@@ -34,6 +50,15 @@ export interface Treatment {
   ownerId: string;
   followUpDate: any;
   notes?: string;
+  products?: ProductEntry[];
+  services?: ServiceEntry[];
+  serviceMRP?: number;
+  serviceDiscount?: number;
+  serviceDiscountType?: 'percentage' | 'fixed';
+  totalAmount?: number;
+  paidAmount?: number;
+  balanceAmount?: number;
+  paymentMethod?: 'Cash' | 'PhonePe' | 'POS' | 'POS QR Code';
   createdAt: any;
   updatedAt?: any;
 }

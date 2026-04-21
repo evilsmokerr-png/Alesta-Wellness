@@ -18,50 +18,66 @@ service cloud.firestore {
     }
 
     match /leads/{leadId} {
-      allow get: if docOwner(existing());
-      allow list: if isSignedIn() && resource.data.ownerId == request.auth.uid;
+      allow read: if isSignedIn() && resource.data.ownerId == request.auth.uid;
       allow create: if isSignedIn() && incoming().ownerId == request.auth.uid 
-        && incoming().updatedAt == request.time;
-      allow update: if docOwner(existing()) 
+        && (incoming().updatedAt == request.time || !('updatedAt' in incoming()));
+      allow update: if isSignedIn() && resource.data.ownerId == request.auth.uid
         && (incoming().updatedAt == request.time || !('updatedAt' in incoming()))
-        && (incoming().ownerId == existing().ownerId);
-      allow delete: if docOwner(existing());
+        && (incoming().ownerId == resource.data.ownerId);
+      allow delete: if isSignedIn() && resource.data.ownerId == request.auth.uid;
     }
 
     match /{path=**}/treatments/{treatmentId} {
-      allow list: if isSignedIn() && resource.data.ownerId == request.auth.uid;
+      allow read: if isSignedIn() && resource.data.ownerId == request.auth.uid;
     }
 
     match /clients/{clientId} {
-      allow get: if docOwner(existing());
-      allow list: if isSignedIn() && resource.data.ownerId == request.auth.uid;
+      allow read: if isSignedIn() && resource.data.ownerId == request.auth.uid;
       
       allow create: if isSignedIn() && incoming().ownerId == request.auth.uid 
-        && incoming().updatedAt == request.time;
+        && (incoming().updatedAt == request.time || !('updatedAt' in incoming()));
       
-      allow update: if docOwner(existing()) 
-        && (incoming().updatedAt == request.time || !('updatedAt' in incoming()) || incoming().updatedAt == existing().updatedAt)
-        && (incoming().ownerId == existing().ownerId);
+      allow update: if isSignedIn() && resource.data.ownerId == request.auth.uid
+        && (incoming().updatedAt == request.time || !('updatedAt' in incoming()))
+        && (incoming().ownerId == resource.data.ownerId);
 
-      allow delete: if docOwner(existing());
+      allow delete: if isSignedIn() && resource.data.ownerId == request.auth.uid;
 
       match /treatments/{treatmentId} {
         function parentOwner() {
           return get(/databases/$(database)/documents/clients/$(clientId)).data.ownerId == request.auth.uid;
         }
 
-        allow list: if isSignedIn() && (resource.data.ownerId == request.auth.uid || parentOwner());
-        allow get: if isSignedIn() && (resource.data.ownerId == request.auth.uid || parentOwner());
+        function isValidTreatment() {
+          let data = incoming();
+          return data.treatmentName is string 
+            && (!('totalAmount' in data) || data.totalAmount is number)
+            && (!('paidAmount' in data) || data.paidAmount is number)
+            && (!('balanceAmount' in data) || data.balanceAmount is number)
+            && (!('serviceMRP' in data) || data.serviceMRP is number)
+            && (!('serviceDiscount' in data) || data.serviceDiscount is number)
+            && (!('serviceDiscountType' in data) || data.serviceDiscountType in ['percentage', 'fixed'])
+            && (!('doctorName' in data) || data.doctorName is string)
+            && (!('notes' in data) || data.notes is string)
+            && (!('productUsage' in data) || data.productUsage is string)
+            && (!('products' in data) || data.products is list)
+            && (!('services' in data) || data.services is list)
+            && (!('paymentMethod' in data) || data.paymentMethod in ['Cash', 'PhonePe', 'POS', 'POS QR Code']);
+        }
+
+        allow read: if isSignedIn() && (resource.data.ownerId == request.auth.uid || parentOwner());
         
         allow create: if isSignedIn() && parentOwner() 
-          && incoming().ownerId == request.auth.uid
-          && incoming().updatedAt == request.time;
+          && (incoming().ownerId == request.auth.uid)
+          && (incoming().updatedAt == request.time || !('updatedAt' in incoming()))
+          && isValidTreatment();
           
-        allow update: if isSignedIn() && (docOwner(existing()) || parentOwner())
-          && (incoming().updatedAt == request.time || !('updatedAt' in incoming()) || incoming().updatedAt == existing().updatedAt)
-          && (incoming().ownerId == existing().ownerId);
+        allow update: if isSignedIn() && (resource.data.ownerId == request.auth.uid || parentOwner())
+          && (incoming().updatedAt == request.time || !('updatedAt' in incoming()))
+          && (incoming().ownerId == resource.data.ownerId)
+          && isValidTreatment();
 
-        allow delete: if isSignedIn() && (docOwner(existing()) || parentOwner());
+        allow delete: if isSignedIn() && (resource.data.ownerId == request.auth.uid || parentOwner());
       }
     }
   }

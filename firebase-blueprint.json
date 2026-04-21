@@ -29,6 +29,14 @@
         "clientPhone": { "type": "string", "description": "Patient phone at time of log" },
         "followUpDate": { "type": "string", "format": "date-time" },
         "notes": { "type": "string" },
+        "products": { "type": "array", "description": "List of products sold/used" },
+        "serviceMRP": { "type": "number", "description": "MRP for the clinical service" },
+        "serviceDiscount": { "type": "number", "description": "Discount on the service" },
+        "serviceDiscountType": { "type": "string", "enum": ["percentage", "fixed"] },
+        "totalAmount": { "type": "number", "description": "Total billable amount" },
+        "paidAmount": { "type": "number", "description": "Amount paid by user" },
+        "balanceAmount": { "type": "number", "description": "Remaining balance" },
+        "paymentMethod": { "type": "string", "enum": ["Cash", "PhonePe", "POS", "POS QR Code"] },
         "createdAt": { "type": "string", "format": "date-time" }
       },
       "required": ["date", "treatmentName", "ownerId", "createdAt", "doctorName"]

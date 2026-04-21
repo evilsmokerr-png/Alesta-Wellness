@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { User } from 'firebase/auth';
-import { Leaf, Users, LayoutDashboard, Bell, Activity, Calendar, ChevronRight, Phone, Zap, StickyNote, CheckCircle2, MapPin, Stethoscope, Tag, MessageSquare, AlertTriangle, RefreshCw, Trash2, Clock, History } from 'lucide-react';
+import { Leaf, Users, LayoutDashboard, Bell, Activity, Calendar, ChevronRight, Phone, Zap, StickyNote, CheckCircle2, MapPin, Stethoscope, Tag, MessageSquare, AlertTriangle, RefreshCw, Trash2, Clock, History, IndianRupee } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { db } from './lib/firebase';
 import { collection, collectionGroup, query, where, onSnapshot, orderBy, limit, doc, getDoc, getDocs, updateDoc, deleteDoc, serverTimestamp, addDoc } from 'firebase/firestore';
@@ -15,7 +15,7 @@ import RescheduleModal from './components/RescheduleModal';
 import { Client, Lead } from './types';
 import { handleFirestoreError } from './lib/errorHandlers';
 
-type ViewType = 'dashboard' | 'clients' | 'notifications' | 'leads';
+type ViewType = 'dashboard' | 'clients' | 'notifications' | 'leads' | 'sales-history';
 
 export default function App() {
   const [user, setUser] = useState<User | null>(null);
@@ -27,10 +27,16 @@ export default function App() {
     treatmentsToday: 0,
     followUpsDue: 0,
     activeLeads: 0,
-    leadsDue: 0
+    leadsDue: 0,
+    todaySales: 0,
+    monthSales: 0,
+    totalDues: 0
   });
+  const [todaySales, setTodaySales] = useState<number>(0);
   const [followUpList, setFollowUpList] = useState<any[]>([]);
   const [treatmentsTodayList, setTreatmentsTodayList] = useState<any[]>([]);
+  const [monthTreatmentsList, setMonthTreatmentsList] = useState<any[]>([]);
+  const [dueTreatmentsList, setDueTreatmentsList] = useState<any[]>([]);
   const [leadsDueList, setLeadsDueList] = useState<Lead[]>([]);
   const [upcomingFollowUpsList, setUpcomingFollowUpsList] = useState<any[]>([]);
   const [upcomingLeadsList, setUpcomingLeadsList] = useState<Lead[]>([]);
@@ -42,10 +48,16 @@ export default function App() {
 
   useEffect(() => {
     if (!user) {
-      setStats({ treatmentsToday: 0, followUpsDue: 0 });
+      setStats({
+        treatmentsToday: 0,
+        followUpsDue: 0,
+        activeLeads: 0,
+        leadsDue: 0,
+        todaySales: 0,
+        monthSales: 0
+      });
       setFollowUpList([]);
       setRecentTreatments([]);
-      setStats({ treatmentsToday: 0, followUpsDue: 0, activeLeads: 0 });
       return;
     }
 
@@ -71,16 +83,25 @@ export default function App() {
       }));
       setTreatmentsTodayList(list);
 
-      // Fetch client data for items that don't have them denormalized
+      const todayTotal = list.reduce((acc, curr: any) => acc + (curr.totalAmount || 0), 0);
+      setStats(prev => ({ ...prev, todaySales: todayTotal }));
+
+      // Fetch patient context for these treatments
       list.forEach(async (item: any) => {
         if (item.parentId && !clientDataMap[item.parentId]) {
-          const cDoc = await getDoc(doc(db, 'clients', item.parentId));
-          if (cDoc.exists()) {
-            const data = cDoc.data() as Client;
-            setClientDataMap(prev => ({
-              ...prev,
-              [item.parentId!]: { ...data, id: cDoc.id }
-            }));
+          try {
+            const cDoc = await getDoc(doc(db, 'clients', item.parentId));
+            if (cDoc.exists()) {
+              const data = cDoc.data() as Client;
+              if (data.ownerId === user.uid) {
+                setClientDataMap(prev => ({
+                  ...prev,
+                  [item.parentId!]: { ...data, id: cDoc.id }
+                }));
+              }
+            }
+          } catch (e) {
+            console.warn("Could not fetch patient context for today's treatment:", item.parentId);
           }
         }
       });
@@ -103,16 +124,22 @@ export default function App() {
       }));
       setFollowUpList(list);
 
-      // Fetch client data for items that don't have them denormalized
+      // Fetch patient context for these treatments
       list.forEach(async (item: any) => {
         if (item.parentId && !clientDataMap[item.parentId]) {
-          const cDoc = await getDoc(doc(db, 'clients', item.parentId));
-          if (cDoc.exists()) {
-            const data = cDoc.data() as Client;
-            setClientDataMap(prev => ({
-              ...prev,
-              [item.parentId!]: { ...data, id: cDoc.id }
-            }));
+          try {
+            const cDoc = await getDoc(doc(db, 'clients', item.parentId));
+            if (cDoc.exists()) {
+              const data = cDoc.data() as Client;
+              if (data.ownerId === user.uid) {
+                setClientDataMap(prev => ({
+                  ...prev,
+                  [item.parentId!]: { ...data, id: cDoc.id }
+                }));
+              }
+            }
+          } catch (e) {
+            console.warn("Could not fetch patient context for follow-up item:", item.parentId);
           }
         }
       });
@@ -185,6 +212,84 @@ export default function App() {
       setUpcomingLeadsList(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Lead)));
     });
 
+    // 9. Sales per month
+    const monthSalesQuery = query(
+      collectionGroup(db, 'treatments'),
+      where('ownerId', '==', user.uid),
+      where('date', '>=', monthStart),
+      where('date', '<=', monthEnd)
+    );
+
+    const unsubMonthSales = onSnapshot(monthSalesQuery, (snapshot) => {
+      const list = snapshot.docs.map(doc => ({
+        id: doc.id,
+        parentId: doc.ref.parent.parent?.id,
+        ...doc.data()
+      }));
+      setMonthTreatmentsList(list);
+      const monthTotal = list.reduce((acc, curr: any) => acc + (curr.totalAmount || 0), 0);
+      setStats(prev => ({ ...prev, monthSales: monthTotal }));
+      
+      // Fetch patient context for these treatments
+      list.forEach(async (item: any) => {
+        if (item.parentId && !clientDataMap[item.parentId]) {
+          try {
+            const cDoc = await getDoc(doc(db, 'clients', item.parentId));
+            if (cDoc.exists()) {
+              const data = cDoc.data() as Client;
+              if (data.ownerId === user.uid) {
+                setClientDataMap(prev => ({
+                  ...prev,
+                  [item.parentId!]: { ...data, id: cDoc.id }
+                }));
+              }
+            }
+          } catch (e) {
+            console.warn("Could not fetch client context for month treatment:", item.parentId);
+          }
+        }
+      });
+    });
+
+    // 10. Outstanding Dues
+    const duesQuery = query(
+      collectionGroup(db, 'treatments'),
+      where('ownerId', '==', user.uid),
+      where('balanceAmount', '>', 0),
+      orderBy('balanceAmount', 'desc')
+    );
+
+    const unsubDues = onSnapshot(duesQuery, (snapshot) => {
+      const list = snapshot.docs.map(doc => ({
+        id: doc.id,
+        parentId: doc.ref.parent.parent?.id,
+        ...doc.data()
+      }));
+      setDueTreatmentsList(list);
+      const duesTotal = list.reduce((acc, curr: any) => acc + (curr.balanceAmount || 0), 0);
+      setStats(prev => ({ ...prev, totalDues: duesTotal }));
+
+      // Fetch patient context for these treatments
+      list.forEach(async (item: any) => {
+        if (item.parentId && !clientDataMap[item.parentId]) {
+          try {
+            const cDoc = await getDoc(doc(db, 'clients', item.parentId));
+            if (cDoc.exists()) {
+              const data = cDoc.data() as Client;
+              if (data.ownerId === user.uid) {
+                setClientDataMap(prev => ({
+                  ...prev,
+                  [item.parentId!]: { ...data, id: cDoc.id }
+                }));
+              }
+            }
+          } catch (e) {
+            console.warn("Could not fetch patient context for due item:", item.parentId);
+          }
+        }
+      });
+    });
+
     return () => {
       unsubTreatments();
       unsubFollowUps();
@@ -193,6 +298,8 @@ export default function App() {
       unsubLeadsDue();
       unsubFutureFollowUps();
       unsubFutureLeads();
+      unsubMonthSales();
+      unsubDues();
     };
   }, [user]);
 
@@ -207,10 +314,18 @@ export default function App() {
   };
 
   const handleSelectClientById = async (clientId: string) => {
+    if (!clientId) return;
     try {
       const clientDoc = await getDoc(doc(db, 'clients', clientId));
       if (clientDoc.exists()) {
-        setSelectedClient({ id: clientDoc.id, ...clientDoc.data() } as Client);
+        const data = clientDoc.data() as Client;
+        if (data.ownerId === user?.uid) {
+           setSelectedClient({ id: clientDoc.id, ...data } as Client);
+        } else {
+           console.warn("Permission mismatch: You do not own this client record.");
+        }
+      } else {
+        console.warn("Client not found for ID:", clientId);
       }
     } catch (error) {
       console.error("Error fetching client from notification:", error);
@@ -491,6 +606,9 @@ export default function App() {
                 >
                    <div className="flex items-center justify-between px-2">
                      <div>
+                       <button onClick={() => setView('dashboard')} className="text-brand-primary text-[10px] font-bold uppercase tracking-widest flex items-center gap-1 mb-1 hover:underline">
+                         ← Back to Dashboard
+                       </button>
                        <h2 className="text-xl sm:text-2xl font-bold text-brand-secondary tracking-tight">Daily Follow-ups</h2>
                        <p className="text-brand-muted text-xs sm:text-sm mt-1">Directly manage patient interactions and clinical outcomes.</p>
                      </div>
@@ -1026,6 +1144,87 @@ export default function App() {
                      </div>
                    )}
                 </motion.div>
+              ) : view === 'sales-history' ? (
+                <motion.div
+                  key="sales-history"
+                  initial={{ opacity: 0, scale: 0.98 }}
+                  animate={{ opacity: 1, scale: 1 }}
+                  exit={{ opacity: 0 }}
+                  className="max-w-4xl mx-auto space-y-6 pb-12"
+                >
+                   <div className="flex items-center justify-between px-2">
+                     <div>
+                       <button onClick={() => setView('dashboard')} className="text-brand-primary text-[10px] font-bold uppercase tracking-widest flex items-center gap-1 mb-1 hover:underline">
+                         ← Back to Dashboard
+                       </button>
+                       <h2 className="text-xl sm:text-2xl font-bold text-brand-secondary tracking-tight">Monthly Sales History</h2>
+                       <p className="text-brand-muted text-xs sm:text-sm mt-1">Itemized record of all clinical sales and pending dues for {format(new Date(), 'MMMM yyyy')}.</p>
+                     </div>
+                     <div className="bg-brand-primary text-white text-[10px] font-black px-4 py-2 rounded-xl shadow-lg shadow-brand-primary/20 flex flex-col items-center">
+                       <span className="opacity-70 uppercase tracking-tighter">Expected Total</span>
+                       <span className="text-lg">₹{stats.monthSales.toLocaleString()}</span>
+                     </div>
+                   </div>
+
+                   <div className="space-y-4">
+                     {monthTreatmentsList.length > 0 ? (
+                       monthTreatmentsList.map((treatment, idx) => {
+                         const clientName = treatment.clientName || clientDataMap[treatment.parentId!]?.name || 'Unknown Patient';
+                         const tDate = treatment.date?.toDate ? treatment.date.toDate() : new Date(treatment.date);
+                         
+                         return (
+                           <motion.div 
+                             key={treatment.id}
+                             initial={{ opacity: 0, y: 10 }}
+                             animate={{ opacity: 1, y: 0 }}
+                             transition={{ delay: idx * 0.03 }}
+                             className={`bg-white rounded-2xl border ${treatment.balanceAmount > 0 ? 'border-red-100 ring-1 ring-red-50' : 'border-brand-border'} overflow-hidden shadow-sm hover:shadow-md transition-all group`}
+                           >
+                             <div className="p-4 sm:p-5">
+                               <div className="flex items-start justify-between gap-4">
+                                 <div className="flex items-center gap-4 flex-1">
+                                   <div className={`w-10 h-10 rounded-xl ${treatment.balanceAmount > 0 ? 'bg-red-50 text-red-500' : 'bg-emerald-50 text-emerald-600'} flex items-center justify-center border border-current opacity-20 flex-shrink-0`}>
+                                      <IndianRupee size={20} />
+                                   </div>
+                                   <div className="min-w-0">
+                                     <div className="flex items-center gap-2">
+                                       <span className="text-sm font-bold text-brand-secondary truncate">{clientName}</span>
+                                       <span className="text-[10px] text-brand-muted font-mono">{format(tDate, 'dd MMM')}</span>
+                                     </div>
+                                     <div className="text-[11px] font-medium text-brand-muted truncate mt-0.5">{treatment.treatmentName}</div>
+                                     <div className="flex items-center gap-3 mt-2">
+                                        <div className="text-[10px] font-bold text-brand-secondary bg-slate-100 px-2 py-0.5 rounded">
+                                          Bill: ₹{treatment.totalAmount}
+                                        </div>
+                                        <div className="text-[10px] font-bold text-emerald-600 bg-emerald-50 px-2 py-0.5 rounded">
+                                          Paid: ₹{treatment.paidAmount}
+                                        </div>
+                                        {treatment.balanceAmount > 0 && (
+                                          <div className="text-[10px] font-bold text-red-600 bg-red-50 px-2 py-0.5 rounded">
+                                            Due: ₹{treatment.balanceAmount}
+                                          </div>
+                                        )}
+                                     </div>
+                                   </div>
+                                 </div>
+                                 <button 
+                                   onClick={() => treatment.parentId && handleSelectClientById(treatment.parentId)}
+                                   className="p-2 bg-slate-50 text-brand-muted rounded-lg hover:bg-brand-primary hover:text-white transition-all shadow-sm"
+                                 >
+                                   <ChevronRight size={16} />
+                                 </button>
+                               </div>
+                             </div>
+                           </motion.div>
+                         );
+                       })
+                     ) : (
+                       <div className="bg-white rounded-3xl border border-brand-border p-12 text-center shadow-sm">
+                          <p className="text-brand-muted text-sm leading-relaxed">No sales recorded for this month yet.</p>
+                       </div>
+                     )}
+                   </div>
+                </motion.div>
               ) : view === 'dashboard' ? (
                 <motion.div
                   key="dashboard"
@@ -1039,12 +1238,14 @@ export default function App() {
                       followUpsDue: stats.followUpsDue + stats.leadsDue
                     }}
                     recentTreatments={recentTreatments}
+                    dueTreatments={dueTreatmentsList}
                     upcomingFollowUps={upcomingFollowUpsList}
                     upcomingInquiries={upcomingLeadsList}
                     clientDataMap={clientDataMap}
                     onNewPatient={() => setIsFormOpen(true)}
                     onViewNotifications={() => setView('notifications')}
                     onViewTreatmentsToday={() => setView('notifications')}
+                    onViewMonthSales={() => setView('sales-history')}
                     onSelectPatient={handleSelectClientById}
                     onDeleteTreatment={handleDeleteTreatmentRecord}
                     onMarkLeadVisited={handleMarkLeadVisited}

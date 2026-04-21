@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
-import { Activity, Users, Calendar, TrendingUp, Clock, ChevronRight, ChevronDown, Plus, History, Stethoscope, Trash2, Tag, MessageSquare, CheckCircle2 } from 'lucide-react';
+import { Activity, Users, Calendar, TrendingUp, Clock, ChevronRight, ChevronDown, Plus, History, Stethoscope, Trash2, Tag, MessageSquare, CheckCircle2, IndianRupee, Wallet, Phone } from 'lucide-react';
 import { format } from 'date-fns';
 import { Client } from '../types';
 
@@ -8,14 +8,19 @@ interface DashboardViewProps {
   stats: {
     treatmentsToday: number;
     followUpsDue: number;
+    todaySales: number;
+    monthSales: number;
+    totalDues: number;
   };
   recentTreatments: any[];
+  dueTreatments: any[];
   upcomingFollowUps: any[];
   upcomingInquiries: any[];
   clientDataMap: Record<string, Client>;
   onNewPatient: () => void;
   onViewNotifications: () => void;
   onViewTreatmentsToday: () => void;
+  onViewMonthSales: () => void;
   onSelectPatient: (id: string) => void;
   onDeleteTreatment: (clientId: string, treatmentId: string) => void;
   onMarkLeadVisited: (leadId: string) => void;
@@ -26,12 +31,14 @@ interface DashboardViewProps {
 export default function DashboardView({ 
   stats, 
   recentTreatments, 
+  dueTreatments,
   upcomingFollowUps,
   upcomingInquiries,
   clientDataMap,
   onNewPatient, 
   onViewNotifications, 
   onViewTreatmentsToday,
+  onViewMonthSales,
   onSelectPatient, 
   onDeleteTreatment, 
   onMarkLeadVisited,
@@ -39,8 +46,9 @@ export default function DashboardView({
   setConfirmingDeleteId 
 }: DashboardViewProps) {
   const today = format(new Date(), 'EEEE, MMMM do');
-  const [showUpcomingInquiries, setShowUpcomingInquiries] = useState(true);
-  const [showUpcomingFollowUps, setShowUpcomingFollowUps] = useState(true);
+  const [showUpcomingInquiries, setShowUpcomingInquiries] = useState(false);
+  const [showUpcomingFollowUps, setShowUpcomingFollowUps] = useState(false);
+  const [showOutstandingDues, setShowOutstandingDues] = useState(false);
 
   return (
     <div className="space-y-6 sm:space-y-8 max-w-7xl mx-auto pb-6">
@@ -91,6 +99,46 @@ export default function DashboardView({
           </div>
           <div className="text-3xl font-bold text-brand-secondary mb-1">{stats.followUpsDue.toString().padStart(2, '0')}</div>
           <div className="text-xs font-semibold text-brand-muted uppercase tracking-wider group-hover:text-brand-primary transition-colors">Pending Follow-ups</div>
+        </button>
+      </div>
+
+      {/* Sales Metrics Grid */}
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 sm:gap-6">
+        <button 
+          onClick={onViewTreatmentsToday}
+          className="bg-white p-5 sm:p-6 rounded-2xl border border-brand-border shadow-sm group hover:border-emerald-500/30 transition-all text-left outline-none"
+        >
+          <div className="flex justify-between items-start mb-4">
+            <div className="w-10 h-10 bg-emerald-50 rounded-xl flex items-center justify-center text-emerald-600">
+              <IndianRupee size={20} />
+            </div>
+            <span className="text-[10px] font-bold text-blue-600 bg-blue-50 px-2 py-0.5 rounded-full uppercase tracking-wider text-center">Gross Sales Today</span>
+          </div>
+          <div className="text-3xl font-black text-brand-secondary mb-1 font-mono group-hover:text-emerald-600 transition-colors">₹{(stats.todaySales || 0).toLocaleString()}</div>
+          <div className="text-xs font-semibold text-brand-muted uppercase tracking-wider">Total (Received + Due) Today</div>
+        </button>
+
+        <button 
+          onClick={onViewMonthSales}
+          className="bg-white p-5 sm:p-6 rounded-2xl border border-brand-border shadow-sm group hover:border-brand-primary/30 transition-all text-left overflow-hidden relative outline-none"
+        >
+          <div className="absolute top-0 right-0 w-32 h-32 bg-brand-primary/5 rounded-full -mr-16 -mt-16 pointer-events-none" />
+          <div className="flex justify-between items-start mb-4">
+            <div className="w-10 h-10 bg-blue-50 rounded-xl flex items-center justify-center text-brand-primary">
+              <TrendingUp size={20} />
+            </div>
+            <div className="flex flex-col items-end">
+              <div className="flex items-center gap-1 text-[10px] font-bold text-brand-primary bg-blue-50 px-2 py-0.5 rounded-full uppercase tracking-wider">
+                <Wallet size={10} />
+                Monthly Sales
+              </div>
+              <div className="mt-1 text-[10px] font-bold text-red-500 bg-red-50 px-2 py-0.5 rounded-full uppercase tracking-wider">
+                Outstanding: ₹{(stats.totalDues || 0).toLocaleString()}
+              </div>
+            </div>
+          </div>
+          <div className="text-3xl font-black text-brand-secondary mb-1 font-mono group-hover:text-brand-primary transition-colors">₹{(stats.monthSales || 0).toLocaleString()}</div>
+          <div className="text-xs font-semibold text-brand-muted uppercase tracking-wider text-wrap">Expected Revenue ({format(new Date(), 'MMMM')})</div>
         </button>
       </div>
 
@@ -329,6 +377,68 @@ export default function DashboardView({
                         ))
                       ) : (
                         <div className="text-[11px] text-brand-muted italic px-1">No upcoming clinical follow-ups.</div>
+                      )}
+                    </motion.div>
+                  )}
+                </AnimatePresence>
+              </div>
+
+              {/* Category: Outstanding Dues */}
+              <div className="space-y-3">
+                <button 
+                  onClick={() => setShowOutstandingDues(!showOutstandingDues)}
+                  className="w-full flex items-center justify-between px-1 group"
+                >
+                  <div className="text-[10px] font-extrabold text-red-500 uppercase tracking-widest flex items-center gap-1.5 group-hover:text-red-400 transition-colors">
+                    <span className="w-1 h-1 bg-red-500 rounded-full"></span>
+                    Outstanding Dues
+                    {showOutstandingDues ? <ChevronDown size={12} /> : <ChevronRight size={12} />}
+                  </div>
+                  {dueTreatments.length > 0 && (
+                    <span className="text-[10px] font-bold text-brand-muted">{dueTreatments.length} Pending</span>
+                  )}
+                </button>
+                
+                <AnimatePresence>
+                  {showOutstandingDues && (
+                    <motion.div 
+                      initial={{ height: 0, opacity: 0 }}
+                      animate={{ height: 'auto', opacity: 1 }}
+                      exit={{ height: 0, opacity: 0 }}
+                      className="space-y-2 overflow-hidden"
+                    >
+                      {dueTreatments.length > 0 ? (
+                        dueTreatments.slice(0, 4).map((item) => (
+                          <div 
+                            key={item.id} 
+                            onClick={() => item.parentId && onSelectPatient(item.parentId)}
+                            className="bg-white p-3.5 rounded-xl border border-red-100 shadow-sm flex items-start justify-between group cursor-pointer hover:border-red-400/20 transition-all border-l-4 border-l-red-400"
+                          >
+                            <div className="min-w-0 pr-2">
+                              <div className="flex items-center gap-2">
+                                <div className="text-xs font-bold text-brand-secondary truncate">
+                                  {item.clientName || clientDataMap[item.parentId!]?.name || 'Patient'}
+                                </div>
+                                <span className="text-[9px] font-black text-red-600 bg-red-50 px-1.5 py-0.5 rounded uppercase tracking-tighter">
+                                  ₹{item.balanceAmount} Due
+                                </span>
+                              </div>
+                              <div className="text-[10px] text-brand-muted mt-1 font-medium truncate flex items-center gap-1">
+                                <Activity size={10} className="text-red-400 opacity-50" />
+                                {item.treatmentName}
+                              </div>
+                              <div className="flex items-center gap-2 mt-2">
+                                <div className="text-[9px] font-bold text-brand-muted flex items-center gap-1">
+                                  <Phone size={10} className="opacity-50" />
+                                  {item.clientPhone || clientDataMap[item.parentId!]?.phone || 'No Phone'}
+                                </div>
+                              </div>
+                            </div>
+                            <ChevronRight size={12} className="text-red-200 mt-1 cursor-pointer group-hover:text-red-500 transition-colors" />
+                          </div>
+                        ))
+                      ) : (
+                        <div className="text-[11px] text-brand-muted italic px-1">No outstanding dues recorded.</div>
                       )}
                     </motion.div>
                   )}
