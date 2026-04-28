@@ -1,12 +1,16 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, FormEvent } from 'react';
 import { auth } from '../lib/firebase';
 import { GoogleAuthProvider, signInWithPopup, signOut, onAuthStateChanged, User } from 'firebase/auth';
-import { LogIn, LogOut, User as UserIcon, Shield, Users } from 'lucide-react';
+import { LogIn, LogOut, User as UserIcon, Shield, Users, Lock, X } from 'lucide-react';
+import { motion, AnimatePresence } from 'motion/react';
 
 export default function Auth({ onAuthChange, onRoleChange }: { onAuthChange: (user: User | null) => void, onRoleChange: (role: 'admin' | 'staff') => void }) {
   const [user, setUser] = useState<User | null>(null);
   const [loading, setLoading] = useState(true);
-  const [role, setRole] = useState<'admin' | 'staff'>((localStorage.getItem('userRole') as any) || 'admin');
+  const [role, setRole] = useState<'admin' | 'staff'>((localStorage.getItem('userRole') as any) || 'staff');
+  const [showPasswordPrompt, setShowPasswordPrompt] = useState(false);
+  const [passwordInput, setPasswordInput] = useState('');
+  const [error, setError] = useState('');
 
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, (currentUser) => {
@@ -42,13 +46,91 @@ export default function Auth({ onAuthChange, onRoleChange }: { onAuthChange: (us
     }
   };
 
+  const handleAdminSwitch = () => {
+    if (role === 'admin') return;
+    setShowPasswordPrompt(true);
+  };
+
+  const confirmAdmin = (e: FormEvent) => {
+    e.preventDefault();
+    if (passwordInput === 'Alesta') {
+      setRole('admin');
+      localStorage.setItem('userRole', 'admin');
+      onRoleChange('admin');
+      setShowPasswordPrompt(false);
+      setPasswordInput('');
+      setError('');
+    } else {
+      setError('Invalid password');
+    }
+  };
+
   if (loading) return <div className="p-4 text-slate-500">Loading...</div>;
 
   return (
     <div className="flex items-center gap-1.5 sm:gap-4">
+      <AnimatePresence>
+        {showPasswordPrompt && (
+          <motion.div 
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/40 backdrop-blur-sm p-4"
+          >
+            <motion.div 
+              initial={{ scale: 0.95, opacity: 0 }}
+              animate={{ scale: 1, opacity: 1 }}
+              exit={{ scale: 0.95, opacity: 0 }}
+              className="bg-white rounded-2xl shadow-2xl w-full max-w-sm overflow-hidden border border-slate-100"
+            >
+              <div className="p-6">
+                <div className="flex items-center justify-between mb-4">
+                  <div className="flex items-center gap-2 text-brand-primary">
+                    <Lock size={18} />
+                    <h3 className="font-bold text-brand-secondary">Admin Access</h3>
+                  </div>
+                  <button 
+                    onClick={() => { setShowPasswordPrompt(false); setPasswordInput(''); setError(''); }}
+                    className="p-1.5 text-slate-400 hover:bg-slate-50 hover:text-slate-600 rounded-full transition-colors"
+                  >
+                    <X size={18} />
+                  </button>
+                </div>
+                
+                <p className="text-xs text-brand-muted mb-6 leading-relaxed">
+                  Switching to Admin mode reveals sensitive financial analytics and history. Please verify your credentials.
+                </p>
+
+                <form onSubmit={confirmAdmin} className="space-y-4">
+                  <div className="space-y-1.5">
+                    <label className="text-[10px] font-bold text-brand-muted uppercase tracking-widest block ml-1">Master Password</label>
+                    <input 
+                      type="password"
+                      autoFocus
+                      placeholder="••••••••"
+                      className={`w-full px-4 py-2.5 bg-slate-50 border ${error ? 'border-red-300 ring-4 ring-red-50' : 'border-slate-200'} rounded-xl text-sm focus:ring-4 focus:ring-brand-primary/10 focus:border-brand-primary transition-all outline-none text-brand-secondary`}
+                      value={passwordInput}
+                      onChange={(e) => { setPasswordInput(e.target.value); if(error) setError(''); }}
+                    />
+                    {error && <p className="text-[10px] font-bold text-red-500 ml-1 mt-1">{error}</p>}
+                  </div>
+                  
+                  <button 
+                    type="submit"
+                    className="w-full py-3 bg-brand-primary text-white rounded-xl text-sm font-bold shadow-lg shadow-brand-primary/20 hover:scale-[1.02] active:scale-[0.98] transition-all"
+                  >
+                    Unlock Admin Suite
+                  </button>
+                </form>
+              </div>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
       <div className="flex bg-slate-100 p-0.5 sm:p-1 rounded-full border border-slate-200">
         <button
-          onClick={() => { setRole('admin'); localStorage.setItem('userRole', 'admin'); onRoleChange('admin'); }}
+          onClick={handleAdminSwitch}
           className={`flex items-center gap-1.5 px-2 sm:px-3 py-1 rounded-full text-[10px] font-bold transition-all ${
             role === 'admin' ? 'bg-white text-brand-primary shadow-sm' : 'text-slate-400 hover:text-slate-600'
           }`}

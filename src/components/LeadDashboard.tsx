@@ -10,9 +10,10 @@ import LeadForm from './LeadForm';
 interface LeadDashboardProps {
   userId: string;
   onMarkVisited: (leadId: string) => void;
+  onRequestDeleteLead?: (leadId: string) => void;
 }
 
-export default function LeadDashboard({ userId, onMarkVisited }: LeadDashboardProps) {
+export default function LeadDashboard({ userId, onMarkVisited, onRequestDeleteLead }: LeadDashboardProps) {
   const [searchTerm, setSearchTerm] = useState('');
   const [leads, setLeads] = useState<Lead[]>([]);
   const [loading, setLoading] = useState(true);
@@ -72,12 +73,9 @@ export default function LeadDashboard({ userId, onMarkVisited }: LeadDashboardPr
     return <span className="bg-slate-50 text-brand-muted px-2 py-0.5 rounded-full text-[10px] font-bold uppercase">{status.replace('_', ' ')}</span>;
   };
 
-  const handleDelete = async (id: string) => {
-    try {
-      await deleteDoc(doc(db, 'leads', id));
-      setConfirmingDeleteId(null);
-    } catch (err) {
-      console.error("Error deleting lead:", err);
+  const handleDelete = (id: string) => {
+    if (onRequestDeleteLead) {
+      onRequestDeleteLead(id);
     }
   };
 

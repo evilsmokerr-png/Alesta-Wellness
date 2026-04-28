@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { db } from '../lib/firebase';
-import { collection, query, where, orderBy, getDocs, addDoc, serverTimestamp, doc, updateDoc, deleteDoc } from 'firebase/firestore';
+import { collection, query, where, orderBy, getDocs, addDoc, serverTimestamp, doc, updateDoc, deleteDoc, onSnapshot } from 'firebase/firestore';
 import { ArrowLeft, Plus, History, Package, Zap, StickyNote, Save, CheckCircle2, ChevronDown, ChevronUp, Stethoscope, Trash2, AlertCircle, ShoppingCart, CreditCard, Banknote, Receipt, Percent, Tag as TagIcon, X, Phone, Smartphone, Pencil, RotateCcw } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { format, addDays, parseISO, differenceInDays } from 'date-fns';
@@ -15,9 +15,21 @@ interface ClientDetailProps {
   onUpdate: (client: Client) => void;
   masterTreatments?: string[];
   masterProducts?: string[];
+  onRequestDeleteClient?: (id: string) => void;
+  onRequestDeleteTreatment?: (clientId: string, treatmentId: string) => void;
 }
 
-export default function ClientDetail({ userId, userRole = 'admin', client, onBack, onUpdate, masterTreatments = [], masterProducts = [] }: ClientDetailProps) {
+export default function ClientDetail({ 
+  userId, 
+  userRole = 'admin', 
+  client, 
+  onBack, 
+  onUpdate, 
+  masterTreatments = [], 
+  masterProducts = [],
+  onRequestDeleteClient,
+  onRequestDeleteTreatment
+}: ClientDetailProps) {
   const [treatments, setTreatments] = useState<Treatment[]>([]);
   const [loading, setLoading] = useState(true);
   const [showHistory, setShowHistory] = useState(false);
@@ -169,22 +181,23 @@ export default function ClientDetail({ userId, userRole = 'admin', client, onBac
   };
 
   useEffect(() => {
-    const fetchTreatments = async () => {
-      try {
-        const q = query(
-          collection(db, 'clients', client.id!, 'treatments'),
-          where('ownerId', '==', userId),
-          orderBy('date', 'desc')
-        );
-        const snapshot = await getDocs(q);
-        setTreatments(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Treatment)));
-      } catch (error) {
-        console.error("Error fetching treatments:", error);
-      } finally {
-        setLoading(false);
-      }
-    };
-    if (userId && client.id) fetchTreatments();
+    if (!userId || !client.id) return;
+
+    const q = query(
+      collection(db, 'clients', client.id, 'treatments'),
+      where('ownerId', '==', userId),
+      orderBy('date', 'desc')
+    );
+
+    const unsubscribe = onSnapshot(q, (snapshot) => {
+      setTreatments(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Treatment)));
+      setLoading(false);
+    }, (error) => {
+      console.error("Error fetching treatments:", error);
+      setLoading(false);
+    });
+
+    return () => unsubscribe();
   }, [client.id, userId]);
 
   const handleLogTreatment = async (e: React.FormEvent) => {
@@ -279,36 +292,15 @@ export default function ClientDetail({ userId, userRole = 'admin', client, onBac
     }
   };
 
-  const handleDeleteClient = async () => {
-    if (!client.id) return;
-    setIsDeleting(true);
-    try {
-      await deleteDoc(doc(db, 'clients', client.id));
-      onBack();
-    } catch (error) {
-      console.error("Error deleting client:", error);
-      alert("Failed to delete patient record. Please try again.");
-    } finally {
-      setIsDeleting(false);
-    }
+  const handleDeleteClient = () => {
+    if (!client.id || !onRequestDeleteClient) return;
+    onRequestDeleteClient(client.id);
   };
 
-  const handleDeleteTreatment = async (treatmentId: string) => {
-    if (!client.id) return;
-    
-    try {
-      await deleteDoc(doc(db, 'clients', client.id, 'treatments', treatmentId));
-      setTreatments(treatments.filter(t => t.id !== treatmentId));
-      setConfirmingTreatmentId(null);
-      // Update client's updatedAt to reflect change in records
-      await updateDoc(doc(db, 'clients', client.id), {
-        updatedAt: serverTimestamp()
-      });
-      onUpdate({ ...client, updatedAt: new Date() } as any);
-    } catch (error) {
-      const msg = handleFirestoreError(error, 'delete', `clients/${client.id}/treatments/${treatmentId}`);
-      alert(msg);
-    }
+  const handleDeleteTreatment = (treatmentId: string) => {
+    if (!client.id || !onRequestDeleteTreatment) return;
+    onRequestDeleteTreatment(client.id, treatmentId);
+    setConfirmingTreatmentId(null);
   };
 
   return (

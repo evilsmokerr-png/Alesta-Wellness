@@ -28,6 +28,7 @@ interface DashboardViewProps {
   onFinalizePayment: (treatment: any) => void;
   onDeleteTreatment: (clientId: string, treatmentId: string) => void;
   onMarkLeadVisited: (leadId: string) => void;
+  onWipeAllData?: () => void;
   confirmingDeleteId: string | null;
   setConfirmingDeleteId: (id: string | null) => void;
 }
@@ -50,6 +51,7 @@ export default function DashboardView({
   onFinalizePayment,
   onDeleteTreatment, 
   onMarkLeadVisited,
+  onWipeAllData,
   confirmingDeleteId, 
   setConfirmingDeleteId 
 }: DashboardViewProps) {
@@ -67,10 +69,19 @@ export default function DashboardView({
           <h2 className="text-xl sm:text-2xl font-bold text-brand-secondary tracking-tight">Clinical Overview</h2>
           <p className="text-brand-muted text-xs sm:text-sm mt-1">{today}</p>
         </div>
-        <div className="w-full sm:w-auto">
+        <div className="w-full sm:w-auto flex flex-wrap items-center gap-2">
+           {userRole === 'admin' && onWipeAllData && (
+             <button 
+               onClick={onWipeAllData}
+               className="flex items-center justify-center gap-2 px-4 py-2.5 bg-red-50 text-red-600 rounded-xl text-sm font-bold hover:bg-red-100 transition-colors border border-red-100/50 shadow-sm"
+             >
+               <Trash2 size={18} />
+               Wipe All Data
+             </button>
+           )}
            <button 
              onClick={onNewPatient}
-             className="w-full sm:w-auto flex items-center justify-center gap-2 px-4 py-2.5 bg-blue-50 text-brand-primary rounded-xl text-sm font-bold hover:bg-blue-100 transition-colors border border-blue-100/50 shadow-sm"
+             className="flex-1 sm:flex-initial flex items-center justify-center gap-2 px-4 py-2.5 bg-blue-50 text-brand-primary rounded-xl text-sm font-bold hover:bg-blue-100 transition-colors border border-blue-100/50 shadow-sm"
            >
              <Plus size={18} />
              New Patient

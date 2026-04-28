@@ -12,22 +12,19 @@ interface DashboardProps {
   onSelectClient: (client: Client) => void;
   onNewClient: () => void;
   onRescheduleClient: (client: Client) => void;
+  onRequestDeleteClient: (clientId: string) => void;
 }
 
-export default function ClientDashboard({ userId, onSelectClient, onNewClient, onRescheduleClient }: DashboardProps) {
+export default function ClientDashboard({ userId, onSelectClient, onNewClient, onRescheduleClient, onRequestDeleteClient }: DashboardProps) {
   const [searchTerm, setSearchTerm] = useState('');
   const [allClients, setAllClients] = useState<Client[]>([]);
   const [loading, setLoading] = useState(false);
   const [confirmingId, setConfirmingId] = useState<string | null>(null);
 
-  const handleDelete = async (e: React.MouseEvent, id: string) => {
+  const handleDelete = (e: React.MouseEvent, id: string) => {
     e.stopPropagation();
-    try {
-      await deleteDoc(doc(db, 'clients', id));
-      setConfirmingId(null);
-    } catch (err) {
-      console.error("Error deleting client:", err);
-    }
+    onRequestDeleteClient(id);
+    setConfirmingId(null);
   };
 
   useEffect(() => {

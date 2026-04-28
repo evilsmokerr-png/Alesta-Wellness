@@ -13,6 +13,7 @@ import ClientForm from './components/ClientForm';
 import LeadDashboard from './components/LeadDashboard';
 import RescheduleModal from './components/RescheduleModal';
 import PaymentFinalizationModal from './components/PaymentFinalizationModal';
+import PasswordVerificationModal from './components/PasswordVerificationModal';
 import { Client, Lead } from './types';
 import { handleFirestoreError } from './lib/errorHandlers';
 
@@ -20,7 +21,7 @@ type ViewType = 'dashboard' | 'clients' | 'notifications' | 'leads' | 'sales-his
 
 export default function App() {
   const [user, setUser] = useState<User | null>(null);
-  const [userRole, setUserRole] = useState<'admin' | 'staff'>('admin');
+  const [userRole, setUserRole] = useState<'admin' | 'staff'>((localStorage.getItem('userRole') as any) || 'staff');
   const [selectedClient, setSelectedClient] = useState<Client | null>(null);
   const [isFormOpen, setIsFormOpen] = useState(false);
   const [view, setView] = useState<ViewType>('dashboard');
@@ -51,6 +52,11 @@ export default function App() {
 
   const [rescheduleData, setRescheduleData] = useState<{ type: 'lead' | 'followup', data: any } | null>(null);
   const [confirmingDeleteId, setConfirmingDeleteId] = useState<string | null>(null);
+  const [pendingDelete, setPendingDelete] = useState<{ 
+    execute: () => Promise<void>, 
+    title: string, 
+    description: string 
+  } | null>(null);
 
   useEffect(() => {
     if (!user) {
@@ -426,17 +432,23 @@ export default function App() {
 
   const handleDeleteTreatmentRecord = async (clientId: string, treatmentId: string) => {
     if (!clientId || !treatmentId) return;
-    try {
-      await deleteDoc(doc(db, 'clients', clientId, 'treatments', treatmentId));
-      setConfirmingDeleteId(null);
-      // Update client's updatedAt
-      await updateDoc(doc(db, 'clients', clientId), {
-        updatedAt: serverTimestamp()
-      });
-    } catch (error) {
-      const msg = handleFirestoreError(error, 'delete', `clients/${clientId}/treatments/${treatmentId}`);
-      alert(msg);
-    }
+    
+    setPendingDelete({
+      title: "Delete Treatment Record",
+      description: "This will permanently remove this clinical history entry. This action cannot be undone.",
+      execute: async () => {
+        try {
+          await deleteDoc(doc(db, 'clients', clientId, 'treatments', treatmentId));
+          setConfirmingDeleteId(null);
+          await updateDoc(doc(db, 'clients', clientId), {
+            updatedAt: serverTimestamp()
+          });
+        } catch (error) {
+          const msg = handleFirestoreError(error, 'delete', `clients/${clientId}/treatments/${treatmentId}`);
+          alert(msg);
+        }
+      }
+    });
   };
 
   const handleMarkLeadVisited = async (leadId: string) => {
@@ -494,13 +506,71 @@ export default function App() {
 
   const handleDeleteLead = async (leadId: string) => {
     if (!leadId) return;
-    try {
-      await deleteDoc(doc(db, 'leads', leadId));
-      setConfirmingDeleteId(null);
-    } catch (error) {
-      const msg = handleFirestoreError(error, 'delete', `leads/${leadId}`);
-      alert(msg);
-    }
+    setPendingDelete({
+      title: "Delete Inquiry",
+      description: "This will permanently remove this lead from your database. Information will be lost forever.",
+      execute: async () => {
+        try {
+          await deleteDoc(doc(db, 'leads', leadId));
+          setConfirmingDeleteId(null);
+        } catch (error) {
+          const msg = handleFirestoreError(error, 'delete', `leads/${leadId}`);
+          alert(msg);
+        }
+      }
+    });
+  };
+
+  const handleDeleteClient = async (clientId: string) => {
+    if (!clientId) return;
+    setPendingDelete({
+      title: "Delete Patient Master File",
+      description: "CRITICAL: This will delete the entire patient profile and all associated clinical history records. This cannot be recovered.",
+      execute: async () => {
+        try {
+          await deleteDoc(doc(db, 'clients', clientId));
+          setSelectedClient(null);
+          setConfirmingDeleteId(null);
+        } catch (error) {
+          const msg = handleFirestoreError(error, 'delete', `clients/${clientId}`);
+          alert(msg);
+        }
+      }
+    });
+  };
+
+  const handleWipeAllData = async () => {
+    setPendingDelete({
+      title: "FACTORY RESET: WIPE ALL DATA",
+      description: "DANGER: This will permanently delete EVERY patient record, clinical history, and inquiry in your database. This is irreversible.",
+      execute: async () => {
+        try {
+          // Wipe Leads
+          const leadsSnapshot = await getDocs(query(collection(db, 'leads'), where('ownerId', '==', user?.uid)));
+          const leadDeletes = leadsSnapshot.docs.map(d => deleteDoc(d.ref));
+          
+          // Wipe Clients (Note: Subcollections like treatments might need recursive delete usually, 
+          // but for this app's scale we'll do an aggressive wipe)
+          const clientsSnapshot = await getDocs(query(collection(db, 'clients'), where('ownerId', '==', user?.uid)));
+          
+          const treatmentDeletes: Promise<void>[] = [];
+          for (const cDoc of clientsSnapshot.docs) {
+            const tSnapshot = await getDocs(collection(db, 'clients', cDoc.id, 'treatments'));
+            tSnapshot.docs.forEach(tDoc => treatmentDeletes.push(deleteDoc(tDoc.ref)));
+          }
+
+          const clientDeletes = clientsSnapshot.docs.map(d => deleteDoc(d.ref));
+
+          await Promise.all([...leadDeletes, ...treatmentDeletes, ...clientDeletes]);
+          
+          setSelectedClient(null);
+          setView('dashboard');
+          alert("System wipe complete. All data has been cleared.");
+        } catch (error) {
+          alert("Error during system wipe: " + error);
+        }
+      }
+    });
   };
 
   const handleRescheduleClient = async (client: Client) => {
@@ -678,6 +748,8 @@ export default function App() {
                     onUpdate={setSelectedClient}
                     masterTreatments={masterTreatments}
                     masterProducts={masterProducts}
+                    onRequestDeleteClient={handleDeleteClient}
+                    onRequestDeleteTreatment={handleDeleteTreatmentRecord}
                   />
                 </motion.div>
               ) : view === 'notifications' ? (
@@ -1229,6 +1301,7 @@ export default function App() {
                     onMarkLeadVisited={handleMarkLeadVisited}
                     confirmingDeleteId={confirmingDeleteId}
                     setConfirmingDeleteId={setConfirmingDeleteId}
+                    onWipeAllData={handleWipeAllData}
                   />
                 </motion.div>
               ) : view === 'activity' ? (
@@ -1367,7 +1440,11 @@ export default function App() {
                   animate={{ opacity: 1, y: 0 }}
                   exit={{ opacity: 0, y: -20 }}
                 >
-                  <LeadDashboard userId={user.uid} onMarkVisited={handleMarkLeadVisited} />
+                  <LeadDashboard 
+                    userId={user.uid} 
+                    onMarkVisited={handleMarkLeadVisited} 
+                    onRequestDeleteLead={handleDeleteLead}
+                  />
                 </motion.div>
               ) : (
                 <motion.div
@@ -1382,6 +1459,7 @@ export default function App() {
                     onSelectClient={setSelectedClient} 
                     onNewClient={() => setIsFormOpen(true)}
                     onRescheduleClient={handleRescheduleClient}
+                    onRequestDeleteClient={handleDeleteClient}
                   />
                 </motion.div>
               )}
@@ -1417,6 +1495,19 @@ export default function App() {
             onSuccess={() => {}}
           />
         )}
+
+        <PasswordVerificationModal 
+          isOpen={!!pendingDelete}
+          title={pendingDelete?.title || 'Security Prompt'}
+          description={pendingDelete?.description || 'Confirming data deletion.'}
+          onClose={() => setPendingDelete(null)}
+          onConfirm={async () => {
+            if (pendingDelete) {
+              await pendingDelete.execute();
+              setPendingDelete(null);
+            }
+          }}
+        />
       </main>
 
       {/* Mobile Bottom Navigation */}
