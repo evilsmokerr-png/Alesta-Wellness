@@ -16,7 +16,7 @@ interface DashboardProps {
 
 export default function ClientDashboard({ userId, onSelectClient, onNewClient, onRescheduleClient }: DashboardProps) {
   const [searchTerm, setSearchTerm] = useState('');
-  const [clients, setClients] = useState<Client[]>([]);
+  const [allClients, setAllClients] = useState<Client[]>([]);
   const [loading, setLoading] = useState(false);
   const [confirmingId, setConfirmingId] = useState<string | null>(null);
 
@@ -35,27 +35,14 @@ export default function ClientDashboard({ userId, onSelectClient, onNewClient, o
     
     setLoading(true);
     const clientsRef = collection(db, 'clients');
-    let q;
-    
-    if (searchTerm.trim()) {
-      q = query(
-        clientsRef,
-        where('ownerId', '==', userId),
-        where('searchName', '>=', searchTerm.toLowerCase()),
-        where('searchName', '<=', searchTerm.toLowerCase() + '\uf8ff'),
-        limit(50)
-      );
-    } else {
-      q = query(
-        clientsRef,
-        where('ownerId', '==', userId),
-        orderBy('updatedAt', 'desc'),
-        limit(30)
-      );
-    }
+    const q = query(
+      clientsRef,
+      where('ownerId', '==', userId),
+      orderBy('updatedAt', 'desc')
+    );
 
     const unsubscribe = onSnapshot(q, (snapshot) => {
-      setClients(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Client)));
+      setAllClients(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Client)));
       setLoading(false);
     }, (error) => {
       console.error("Error fetching patients:", error);
@@ -63,9 +50,19 @@ export default function ClientDashboard({ userId, onSelectClient, onNewClient, o
     });
 
     return () => unsubscribe();
-  }, [searchTerm, userId]);
+  }, [userId]);
 
-  // Remove the old handleSearch function as it's now reactive
+  const filteredClients = allClients.filter(client => {
+    if (!searchTerm.trim()) return true;
+    const term = searchTerm.toLowerCase();
+    const name = client.name.toLowerCase();
+    const phone = client.phone.replace(/\D/g, '');
+    const cleanTerm = term.replace(/\D/g, '');
+    
+    return name.includes(term) || 
+           (cleanTerm && phone.includes(cleanTerm)) ||
+           (client.address && client.address.toLowerCase().includes(term));
+  });
 
   return (
     <div className="space-y-8 max-w-7xl mx-auto">
@@ -79,7 +76,7 @@ export default function ClientDashboard({ userId, onSelectClient, onNewClient, o
           <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-brand-muted group-focus-within:text-brand-primary transition-colors" size={16} />
           <input
             type="text"
-            placeholder="Search record by name..."
+            placeholder="Search record by name, phone or location..."
             className="w-full pl-11 pr-4 py-2.5 sm:py-3 bg-white border border-brand-border rounded-xl text-base sm:text-sm focus:ring-2 focus:ring-brand-primary/10 focus:border-brand-primary transition-all outline-none text-brand-secondary shadow-sm"
             value={searchTerm}
             onChange={(e) => setSearchTerm(e.target.value)}
@@ -97,7 +94,7 @@ export default function ClientDashboard({ userId, onSelectClient, onNewClient, o
 
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4 sm:gap-6">
         <AnimatePresence mode="popLayout">
-          {clients.map((client, index) => (
+          {filteredClients.map((client, index) => (
             <motion.div
               key={client.id}
               initial={{ opacity: 0, y: 10 }}
@@ -196,7 +193,7 @@ export default function ClientDashboard({ userId, onSelectClient, onNewClient, o
         </AnimatePresence>
       </div>
 
-      {clients.length === 0 && !loading && (
+      {filteredClients.length === 0 && !loading && (
         <div className="text-center py-20">
           <div className="bg-slate-50 w-20 h-20 rounded-full flex items-center justify-center mx-auto mb-4">
             <ClipboardList size={32} className="text-slate-300" />
