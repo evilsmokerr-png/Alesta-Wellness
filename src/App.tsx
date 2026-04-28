@@ -46,6 +46,8 @@ export default function App() {
   const [recentTreatments, setRecentTreatments] = useState<any[]>([]);
   const [pendingPaymentsList, setPendingPaymentsList] = useState<any[]>([]);
   const [finalizingPayment, setFinalizingPayment] = useState<any | null>(null);
+  const [masterTreatments, setMasterTreatments] = useState<string[]>([]);
+  const [masterProducts, setMasterProducts] = useState<string[]>([]);
 
   const [rescheduleData, setRescheduleData] = useState<{ type: 'lead' | 'followup', data: any } | null>(null);
   const [confirmingDeleteId, setConfirmingDeleteId] = useState<string | null>(null);
@@ -347,6 +349,38 @@ export default function App() {
     };
   }, [user]);
 
+  // Master Lists logic
+  useEffect(() => {
+    if (!user) {
+      setMasterTreatments([]);
+      setMasterProducts([]);
+      return;
+    }
+
+    const q = query(
+      collectionGroup(db, 'treatments'),
+      where('ownerId', '==', user.uid),
+      orderBy('date', 'desc'),
+      limit(200)
+    );
+
+    const unsubscribe = onSnapshot(q, (snapshot) => {
+      const tSet = new Set<string>();
+      const pSet = new Set<string>();
+      snapshot.docs.forEach(doc => {
+        const data = doc.data();
+        if (data.treatmentName) tSet.add(data.treatmentName);
+        if (data.productUsage) pSet.add(data.productUsage);
+      });
+      setMasterTreatments(Array.from(tSet).sort());
+      setMasterProducts(Array.from(pSet).sort());
+    }, (error) => {
+      console.error("Error fetching master suggestions:", error);
+    });
+
+    return () => unsubscribe();
+  }, [user]);
+
   const handleClientSaved = (client: Client) => {
     setIsFormOpen(false);
     setSelectedClient(client);
@@ -642,6 +676,8 @@ export default function App() {
                     client={selectedClient} 
                     onBack={() => setSelectedClient(null)} 
                     onUpdate={setSelectedClient}
+                    masterTreatments={masterTreatments}
+                    masterProducts={masterProducts}
                   />
                 </motion.div>
               ) : view === 'notifications' ? (

@@ -13,18 +13,26 @@ interface ClientDetailProps {
   client: Client;
   onBack: () => void;
   onUpdate: (client: Client) => void;
+  masterTreatments?: string[];
+  masterProducts?: string[];
 }
 
-export default function ClientDetail({ userId, userRole = 'admin', client, onBack, onUpdate }: ClientDetailProps) {
+export default function ClientDetail({ userId, userRole = 'admin', client, onBack, onUpdate, masterTreatments = [], masterProducts = [] }: ClientDetailProps) {
   const [treatments, setTreatments] = useState<Treatment[]>([]);
   const [loading, setLoading] = useState(true);
   const [showHistory, setShowHistory] = useState(false);
+  const [isAddingTreatment, setIsAddingTreatment] = useState(false);
   const [isLogging, setIsLogging] = useState(false);
   const [isDeleting, setIsDeleting] = useState(false);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const [confirmingTreatmentId, setConfirmingTreatmentId] = useState<string | null>(null);
   const [editingTreatmentId, setEditingTreatmentId] = useState<string | null>(null);
   const [splitPayments, setSplitPayments] = useState<{method: 'Cash' | 'PhonePe' | 'POS' | 'POS QR Code', amount: number}[]>([]);
+
+  // Suggestion states
+  const [treatmentSuggestions, setTreatmentSuggestions] = useState<string[]>([]);
+  const [productSuggestions, setProductSuggestions] = useState<string[]>([]);
+  const [activeSuggestionField, setActiveSuggestionField] = useState<'treatment' | 'product' | null>(null);
 
   const [newTreatment, setNewTreatment] = useState({
     treatmentName: '',
@@ -134,6 +142,7 @@ export default function ClientDetail({ userId, userRole = 'admin', client, onBac
       serviceDiscountType: loadedServices.length > 0 ? 'percentage' : (t.serviceDiscountType || 'percentage'),
     });
     
+    setIsAddingTreatment(true);
     setShowHistory(false); // Scroll up to form
     window.scrollTo({ top: 0, behavior: 'smooth' });
   };
@@ -259,6 +268,7 @@ export default function ClientDetail({ userId, userRole = 'admin', client, onBac
       });
 
       resetForm();
+      setIsAddingTreatment(false);
       setShowHistory(true);
       onUpdate({ ...client, updatedAt: new Date() } as any);
     } catch (error) {
@@ -302,15 +312,39 @@ export default function ClientDetail({ userId, userRole = 'admin', client, onBac
   };
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-6 pb-20">
       <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
-        <button 
-          onClick={onBack}
-          className="flex items-center gap-2 text-brand-muted hover:text-brand-primary transition-colors font-semibold text-sm group"
-        >
-          <ArrowLeft size={16} />
-          Back to Directory
-        </button>
+        <div className="flex items-center gap-4">
+          <button 
+            onClick={onBack}
+            className="flex items-center gap-2 text-brand-muted hover:text-brand-primary transition-colors font-semibold text-sm group"
+          >
+            <ArrowLeft size={16} />
+            Back
+          </button>
+          <div className="h-4 w-[1px] bg-brand-border hidden sm:block"></div>
+          <button 
+            onClick={() => {
+              if (isAddingTreatment) {
+                resetForm();
+                setIsAddingTreatment(false);
+              } else {
+                setIsAddingTreatment(true);
+              }
+            }}
+            className={`flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-bold transition-all shadow-lg ${
+              isAddingTreatment 
+                ? 'bg-slate-100 text-brand-secondary border border-brand-border' 
+                : 'bg-brand-primary text-white shadow-brand-primary/20 hover:scale-105 active:scale-95'
+            }`}
+          >
+            {isAddingTreatment ? (
+              <><X size={14} /> Cancel Entry</>
+            ) : (
+              <><Plus size={14} /> Add New Treatment</>
+            )}
+          </button>
+        </div>
 
         {!showDeleteConfirm ? (
           <button 
@@ -372,21 +406,68 @@ export default function ClientDetail({ userId, userRole = 'admin', client, onBac
         </div>
       </div>
 
-      {/* New Treatment Form Card */}
-      <div className="section-card">
-        <div className="section-title">New Treatment Entry</div>
-        <form onSubmit={handleLogTreatment} className="space-y-0">
-          <div className="p-5 sm:p-8 space-y-6">
+      {/* New Treatment Form Card (Conditional) */}
+      <AnimatePresence>
+        {isAddingTreatment && (
+          <motion.div 
+            initial={{ opacity: 0, height: 0, y: -20 }}
+            animate={{ opacity: 1, height: 'auto', y: 0 }}
+            exit={{ opacity: 0, height: 0, y: -20 }}
+            className="overflow-hidden"
+          >
+            <div className="section-card mt-2">
+              <div className="section-title bg-brand-primary/5 border-b border-brand-primary/10 text-brand-primary">
+                {editingTreatmentId ? 'Modify Treatment Record' : 'New Treatment Entry'}
+              </div>
+              <form onSubmit={handleLogTreatment} className="space-y-0">
+                <div className="p-5 sm:p-8 space-y-6">
+                  {/* ... form content continues below ... */}
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6 items-start">
-              <div className="sm:col-span-1 lg:col-span-1 space-y-1.5">
+              <div className="sm:col-span-1 lg:col-span-1 space-y-1.5 relative">
                 <label className="text-[10px] font-bold text-brand-muted uppercase tracking-widest block ml-1">Treatment Name</label>
                 <input
                   type="text"
                   placeholder="Laser Resurfacing"
+                  autoComplete="off"
                   className="w-full px-4 py-2.5 bg-white border border-brand-border rounded-xl text-base sm:text-sm focus:ring-2 focus:ring-brand-primary/10 focus:border-brand-primary transition-all outline-none"
                   value={newTreatment.treatmentName}
-                  onChange={(e) => setNewTreatment({ ...newTreatment, treatmentName: e.target.value })}
+                  onFocus={() => setActiveSuggestionField('treatment')}
+                  onBlur={() => setTimeout(() => setActiveSuggestionField(null), 200)}
+                  onChange={(e) => {
+                    const val = e.target.value;
+                    setNewTreatment({ ...newTreatment, treatmentName: val });
+                    if (val.length > 0) {
+                      const matches = masterTreatments.filter(t => t.toLowerCase().includes(val.toLowerCase())).slice(0, 5);
+                      setTreatmentSuggestions(matches);
+                    } else {
+                      setTreatmentSuggestions([]);
+                    }
+                  }}
                 />
+                <AnimatePresence>
+                  {activeSuggestionField === 'treatment' && treatmentSuggestions.length > 0 && (
+                    <motion.div 
+                      initial={{ opacity: 0, y: -5 }}
+                      animate={{ opacity: 1, y: 0 }}
+                      exit={{ opacity: 0, y: -5 }}
+                      className="absolute z-[60] left-0 right-0 top-full mt-1 bg-white border border-brand-border rounded-xl shadow-xl overflow-hidden"
+                    >
+                      {treatmentSuggestions.map((s, i) => (
+                        <button
+                          key={i}
+                          type="button"
+                          onClick={() => {
+                            setNewTreatment({ ...newTreatment, treatmentName: s });
+                            setTreatmentSuggestions([]);
+                          }}
+                          className="w-full text-left px-4 py-2.5 text-xs font-bold text-brand-secondary hover:bg-brand-primary/5 hover:text-brand-primary transition-colors border-b border-slate-50 last:border-0"
+                        >
+                          {s}
+                        </button>
+                      ))}
+                    </motion.div>
+                  )}
+                </AnimatePresence>
                 <div className="flex flex-wrap gap-1.5 mt-1.5 px-0.5">
                   {['Doctor Consultation', 'Laser Treatment', 'HydraFacial', 'Chemical Peel'].map(name => (
                     <button
@@ -401,15 +482,51 @@ export default function ClientDetail({ userId, userRole = 'admin', client, onBac
                 </div>
               </div>
 
-            <div className="space-y-1.5">
+            <div className="space-y-1.5 relative">
               <label className="text-[10px] font-bold text-brand-muted uppercase tracking-widest block ml-1">Intensity / Level</label>
               <input
                 type="text"
                 placeholder="30J / Hydro-Gel"
+                autoComplete="off"
                 className="w-full px-4 py-2.5 bg-white border border-brand-border rounded-xl text-base sm:text-sm focus:ring-2 focus:ring-brand-primary/10 focus:border-brand-primary transition-all outline-none"
                 value={newTreatment.productUsage}
-                onChange={(e) => setNewTreatment({ ...newTreatment, productUsage: e.target.value })}
+                onFocus={() => setActiveSuggestionField('product')}
+                onBlur={() => setTimeout(() => setActiveSuggestionField(null), 200)}
+                onChange={(e) => {
+                  const val = e.target.value;
+                  setNewTreatment({ ...newTreatment, productUsage: val });
+                  if (val.length > 0) {
+                    const matches = masterProducts.filter(p => p.toLowerCase().includes(val.toLowerCase())).slice(0, 5);
+                    setProductSuggestions(matches);
+                  } else {
+                    setProductSuggestions([]);
+                  }
+                }}
               />
+              <AnimatePresence>
+                {activeSuggestionField === 'product' && productSuggestions.length > 0 && (
+                  <motion.div 
+                    initial={{ opacity: 0, y: -5 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    exit={{ opacity: 0, y: -5 }}
+                    className="absolute z-[60] left-0 right-0 top-full mt-1 bg-white border border-brand-border rounded-xl shadow-xl overflow-hidden"
+                  >
+                    {productSuggestions.map((s, i) => (
+                      <button
+                        key={i}
+                        type="button"
+                        onClick={() => {
+                          setNewTreatment({ ...newTreatment, productUsage: s });
+                          setProductSuggestions([]);
+                        }}
+                        className="w-full text-left px-4 py-2.5 text-xs font-bold text-brand-secondary hover:bg-brand-primary/5 hover:text-brand-primary transition-colors border-b border-slate-50 last:border-0"
+                      >
+                        {s}
+                      </button>
+                    ))}
+                  </motion.div>
+                )}
+              </AnimatePresence>
             </div>
 
             <div className="space-y-1.5">
@@ -816,8 +933,11 @@ export default function ClientDetail({ userId, userRole = 'admin', client, onBac
             </div>
           </div>
         )}
-            </form>
-          </div>
+              </form>
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
 
       {/* History Table Card */}
       <div className="section-card">
