@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
-import { Activity, Users, Calendar, TrendingUp, Clock, ChevronRight, ChevronDown, Plus, History, Stethoscope, Trash2, Tag, MessageSquare, CheckCircle2, IndianRupee, Wallet, Phone } from 'lucide-react';
+import { Activity, Users, Calendar, TrendingUp, Clock, ChevronRight, ChevronDown, Plus, History, Stethoscope, Trash2, Tag, MessageSquare, CheckCircle2, IndianRupee, Wallet, Phone, Zap } from 'lucide-react';
 import { format } from 'date-fns';
 import { Client } from '../types';
 
@@ -17,12 +17,15 @@ interface DashboardViewProps {
   dueTreatments: any[];
   upcomingFollowUps: any[];
   upcomingInquiries: any[];
+  pendingPayments: any[];
+  treatmentsToday: any[];
   clientDataMap: Record<string, Client>;
   onNewPatient: () => void;
   onViewNotifications: () => void;
   onViewTreatmentsToday: () => void;
   onViewMonthSales: () => void;
   onSelectPatient: (id: string) => void;
+  onFinalizePayment: (treatment: any) => void;
   onDeleteTreatment: (clientId: string, treatmentId: string) => void;
   onMarkLeadVisited: (leadId: string) => void;
   confirmingDeleteId: string | null;
@@ -36,12 +39,15 @@ export default function DashboardView({
   dueTreatments,
   upcomingFollowUps,
   upcomingInquiries,
+  pendingPayments,
+  treatmentsToday,
   clientDataMap,
   onNewPatient, 
   onViewNotifications, 
   onViewTreatmentsToday,
   onViewMonthSales,
   onSelectPatient, 
+  onFinalizePayment,
   onDeleteTreatment, 
   onMarkLeadVisited,
   confirmingDeleteId, 
@@ -51,6 +57,7 @@ export default function DashboardView({
   const [showUpcomingInquiries, setShowUpcomingInquiries] = useState(false);
   const [showUpcomingFollowUps, setShowUpcomingFollowUps] = useState(false);
   const [showOutstandingDues, setShowOutstandingDues] = useState(false);
+  const [adminTab, setAdminTab] = useState<'pending' | 'staff' | 'calling'>('pending');
 
   return (
     <div className="space-y-6 sm:space-y-8 max-w-7xl mx-auto pb-6">
@@ -103,6 +110,193 @@ export default function DashboardView({
           <div className="text-xs font-semibold text-brand-muted uppercase tracking-wider group-hover:text-brand-primary transition-colors">Pending Follow-ups</div>
         </button>
       </div>
+
+      {/* Admin Operations Center */}
+      {userRole === 'admin' && (
+        <motion.div 
+          initial={{ opacity: 0, y: 10 }}
+          animate={{ opacity: 1, y: 0 }}
+          className="bg-white rounded-3xl border border-brand-border shadow-sm overflow-hidden"
+        >
+          <div className="bg-slate-50 border-b border-brand-border p-4 sm:p-6 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+            <div>
+              <h3 className="text-sm font-bold text-brand-secondary uppercase tracking-widest flex items-center gap-2">
+                <Zap size={16} className="text-brand-primary" />
+                Operations Control Center
+              </h3>
+              <p className="text-[10px] text-brand-muted font-bold uppercase tracking-widest mt-1">Review activity & finalize billing</p>
+            </div>
+            <div className="flex bg-white p-1 rounded-xl border border-brand-border shadow-sm">
+              {[
+                { id: 'pending', label: 'Pending Billing', count: pendingPayments.length },
+                { id: 'staff', label: 'Staff Inputs', count: treatmentsToday.filter(t => t.addedByRole === 'staff').length },
+                { id: 'calling', label: 'Calling updates', count: upcomingInquiries.length + upcomingFollowUps.length }
+              ].map((tab) => (
+                <button
+                  key={tab.id}
+                  onClick={() => setAdminTab(tab.id as any)}
+                  className={`px-3 py-1.5 rounded-lg text-[10px] font-bold transition-all flex items-center gap-2 ${
+                    adminTab === tab.id 
+                      ? 'bg-blue-50 text-brand-primary shadow-sm' 
+                      : 'text-brand-muted hover:text-brand-secondary'
+                  }`}
+                >
+                  {tab.label}
+                  {tab.count > 0 && (
+                    <span className={`px-1.5 py-0.5 rounded-full text-[8px] ${adminTab === tab.id ? 'bg-brand-primary text-white' : 'bg-slate-100 text-brand-muted'}`}>
+                      {tab.count}
+                    </span>
+                  )}
+                </button>
+              ))}
+            </div>
+          </div>
+
+          <div className="p-4 sm:p-6">
+            <AnimatePresence mode="wait">
+              {adminTab === 'pending' && (
+                <motion.div 
+                  key="pending"
+                  initial={{ opacity: 0, x: -10 }}
+                  animate={{ opacity: 1, x: 0 }}
+                  exit={{ opacity: 0, x: 10 }}
+                  className="space-y-3"
+                >
+                  {pendingPayments.length > 0 ? (
+                    pendingPayments.map((p) => (
+                      <div key={p.id} className="flex items-center justify-between bg-orange-50/30 p-3 rounded-2xl border border-orange-100 group">
+                        <div className="flex items-center gap-3 overflow-hidden">
+                          <div className="w-10 h-10 rounded-xl bg-orange-50 flex-shrink-0 flex items-center justify-center text-orange-600 border border-orange-100">
+                             <IndianRupee size={18} />
+                          </div>
+                          <div className="truncate">
+                            <div className="text-xs font-bold text-brand-secondary truncate">
+                              {p.clientName || clientDataMap[p.parentId!]?.name || 'Patient'} - {p.treatmentName}
+                            </div>
+                            <div className="text-[10px] text-brand-muted font-medium mt-0.5">
+                              Added by Staff • {format(p.date?.toDate ? p.date.toDate() : new Date(p.date), 'MMM d, h:mm a')}
+                            </div>
+                          </div>
+                        </div>
+                        <button 
+                          onClick={() => onFinalizePayment(p)}
+                          className="px-4 py-1.5 bg-brand-primary text-white rounded-lg text-[10px] font-bold shadow-lg shadow-brand-primary/20 hover:scale-105 transition-all whitespace-nowrap"
+                        >
+                          Add Payment Info
+                        </button>
+                      </div>
+                    ))
+                  ) : (
+                    <div className="py-8 text-center bg-slate-50/50 rounded-2xl border border-dashed border-slate-200">
+                      <p className="text-[11px] font-bold text-brand-muted uppercase tracking-widest">No pending billing entries</p>
+                    </div>
+                  )}
+                </motion.div>
+              )}
+
+              {adminTab === 'staff' && (
+                <motion.div 
+                  key="staff"
+                  initial={{ opacity: 0, x: -10 }}
+                  animate={{ opacity: 1, x: 0 }}
+                  exit={{ opacity: 0, x: 10 }}
+                  className="space-y-3"
+                >
+                  {treatmentsToday.filter(t => t.addedByRole === 'staff').length > 0 ? (
+                    treatmentsToday.filter(t => t.addedByRole === 'staff').map((t) => (
+                      <div key={t.id} className="flex items-center justify-between bg-slate-50 p-3 rounded-2xl border border-brand-border hover:border-brand-primary/20 transition-all cursor-pointer" onClick={() => t.parentId && onSelectPatient(t.parentId)}>
+                        <div className="flex items-center gap-3 overflow-hidden">
+                          <div className="w-10 h-10 rounded-xl bg-white flex-shrink-0 flex items-center justify-center text-brand-muted border border-brand-border">
+                             <Users size={18} />
+                          </div>
+                          <div className="truncate">
+                            <div className="text-xs font-bold text-brand-secondary truncate">
+                              {t.clientName || clientDataMap[t.parentId!]?.name || 'Patient'}
+                            </div>
+                            <div className="text-[10px] text-brand-muted font-medium mt-0.5">
+                              {t.treatmentName} • {format(t.date?.toDate ? t.date.toDate() : new Date(t.date), 'h:mm a')}
+                            </div>
+                          </div>
+                        </div>
+                        <div className="flex items-center gap-2">
+                           {t.paymentPending ? (
+                             <span className="text-[8px] font-black bg-orange-100 text-orange-600 px-1.5 py-0.5 rounded-full uppercase">Pending Billing</span>
+                           ) : (
+                             <span className="text-[8px] font-black bg-emerald-100 text-emerald-600 px-1.5 py-0.5 rounded-full uppercase">Finalized</span>
+                           )}
+                           <ChevronRight size={14} className="text-brand-muted" />
+                        </div>
+                      </div>
+                    ))
+                  ) : (
+                    <div className="py-8 text-center bg-slate-50/50 rounded-2xl border border-dashed border-slate-200">
+                      <p className="text-[11px] font-bold text-brand-muted uppercase tracking-widest">No staff activity today yet</p>
+                    </div>
+                  )}
+                </motion.div>
+              )}
+
+              {adminTab === 'calling' && (
+                <motion.div 
+                  key="calling"
+                  initial={{ opacity: 0, x: -10 }}
+                  animate={{ opacity: 1, x: 0 }}
+                  exit={{ opacity: 0, x: 10 }}
+                  className="space-y-4"
+                >
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div className="space-y-2">
+                      <label className="text-[9px] font-black text-emerald-600 uppercase tracking-widest ml-1">Planned Inquiries</label>
+                      <div className="space-y-2">
+                        {upcomingInquiries.length > 0 ? (
+                          upcomingInquiries.slice(0, 5).map(lead => (
+                            <div key={lead.id} className="bg-white p-2.5 rounded-xl border border-brand-border flex items-center justify-between">
+                               <div className="min-w-0">
+                                 <div className="text-[10px] font-bold text-brand-secondary truncate">{lead.name}</div>
+                                 <div className="text-[9px] text-brand-muted mt-0.5 flex items-center gap-1">
+                                    <Clock size={8} /> {format(lead.appointmentDate?.toDate ? lead.appointmentDate.toDate() : new Date(lead.appointmentDate), 'MMM d')}
+                                 </div>
+                               </div>
+                               <a href={`tel:${lead.phone}`} className="p-1.5 bg-emerald-50 text-emerald-600 rounded-lg border border-emerald-100">
+                                 <Phone size={12} />
+                               </a>
+                            </div>
+                          ))
+                        ) : (
+                          <div className="p-4 text-[10px] text-brand-muted italic text-center">No inquires to call</div>
+                        )}
+                      </div>
+                    </div>
+
+                    <div className="space-y-2">
+                      <label className="text-[9px] font-black text-brand-primary uppercase tracking-widest ml-1">Scheduled Follow-ups</label>
+                      <div className="space-y-2">
+                        {upcomingFollowUps.length > 0 ? (
+                          upcomingFollowUps.slice(0, 5).map(item => (
+                            <div key={item.id} className="bg-white p-2.5 rounded-xl border border-brand-border flex items-center justify-between">
+                               <div className="min-w-0">
+                                 <div className="text-[10px] font-bold text-brand-secondary truncate">{item.clientName || clientDataMap[item.parentId!]?.name}</div>
+                                 <div className="text-[9px] text-brand-muted mt-0.5 flex items-center gap-1">
+                                    <Clock size={8} /> {format(item.followUpDate?.toDate ? item.followUpDate.toDate() : new Date(item.followUpDate), 'MMM d')}
+                                 </div>
+                               </div>
+                               <button onClick={() => item.parentId && onSelectPatient(item.parentId)} className="p-1.5 bg-blue-50 text-brand-primary rounded-lg border border-blue-100">
+                                 <History size={12} />
+                               </button>
+                            </div>
+                          ))
+                        ) : (
+                          <div className="p-4 text-[10px] text-brand-muted italic text-center">No follow-ups to call</div>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+                </motion.div>
+              )}
+            </AnimatePresence>
+          </div>
+        </motion.div>
+      )}
 
       {/* Sales Metrics Grid */}
       {userRole === 'admin' && (

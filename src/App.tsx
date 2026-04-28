@@ -12,10 +12,11 @@ import ClientDetail from './components/ClientDetail';
 import ClientForm from './components/ClientForm';
 import LeadDashboard from './components/LeadDashboard';
 import RescheduleModal from './components/RescheduleModal';
+import PaymentFinalizationModal from './components/PaymentFinalizationModal';
 import { Client, Lead } from './types';
 import { handleFirestoreError } from './lib/errorHandlers';
 
-type ViewType = 'dashboard' | 'clients' | 'notifications' | 'leads' | 'sales-history';
+type ViewType = 'dashboard' | 'clients' | 'notifications' | 'leads' | 'sales-history' | 'activity';
 
 export default function App() {
   const [user, setUser] = useState<User | null>(null);
@@ -43,6 +44,8 @@ export default function App() {
   const [upcomingLeadsList, setUpcomingLeadsList] = useState<Lead[]>([]);
   const [clientDataMap, setClientDataMap] = useState<Record<string, Client>>({});
   const [recentTreatments, setRecentTreatments] = useState<any[]>([]);
+  const [pendingPaymentsList, setPendingPaymentsList] = useState<any[]>([]);
+  const [finalizingPayment, setFinalizingPayment] = useState<any | null>(null);
 
   const [rescheduleData, setRescheduleData] = useState<{ type: 'lead' | 'followup', data: any } | null>(null);
   const [confirmingDeleteId, setConfirmingDeleteId] = useState<string | null>(null);
@@ -59,6 +62,7 @@ export default function App() {
       });
       setFollowUpList([]);
       setRecentTreatments([]);
+      setPendingPaymentsList([]);
       return;
     }
 
@@ -292,6 +296,43 @@ export default function App() {
       });
     });
 
+    // 11. Pending Payments (Finalization required)
+    const pendingPaymentsQuery = query(
+      collectionGroup(db, 'treatments'),
+      where('ownerId', '==', user.uid),
+      where('paymentPending', '==', true),
+      orderBy('date', 'desc'),
+      limit(20)
+    );
+
+    const unsubPendingPayments = onSnapshot(pendingPaymentsQuery, (snapshot) => {
+      const list = snapshot.docs.map(doc => ({
+        id: doc.id,
+        parentId: doc.ref.parent.parent?.id,
+        ...doc.data()
+      }));
+      setPendingPaymentsList(list);
+      
+      list.forEach(async (item: any) => {
+        if (item.parentId && !clientDataMap[item.parentId]) {
+          try {
+            const cDoc = await getDoc(doc(db, 'clients', item.parentId));
+            if (cDoc.exists()) {
+              const data = cDoc.data() as Client;
+              if (data.ownerId === user.uid) {
+                setClientDataMap(prev => ({
+                  ...prev,
+                  [item.parentId!]: { ...data, id: cDoc.id }
+                }));
+              }
+            }
+          } catch (e) {
+            console.warn("Could not fetch client context for pending payment:", item.parentId);
+          }
+        }
+      });
+    });
+
     return () => {
       unsubTreatments();
       unsubFollowUps();
@@ -302,6 +343,7 @@ export default function App() {
       unsubFutureLeads();
       unsubMonthSales();
       unsubDues();
+      unsubPendingPayments();
     };
   }, [user]);
 
@@ -618,120 +660,11 @@ export default function App() {
                        <p className="text-brand-muted text-xs sm:text-sm mt-1">Directly manage patient interactions and clinical outcomes.</p>
                      </div>
                      <div className="bg-brand-primary text-white text-xs font-bold px-3 py-1 rounded-full shadow-lg shadow-brand-primary/20">
-                       {followUpList.length + leadsDueList.length + treatmentsTodayList.length} Total
+                       {followUpList.length + leadsDueList.length} Total
                      </div>
                    </div>
 
-                   {treatmentsTodayList.length > 0 && (
-                     <div className="space-y-4 pt-2">
-                       <div className="flex items-center gap-2 px-2 text-brand-primary">
-                         <Activity size={18} />
-                         <h3 className="font-bold text-sm uppercase tracking-widest">Clinical Activity (Today)</h3>
-                       </div>
-                       {treatmentsTodayList.map((treatment, idx) => {
-                         const clientName = treatment.clientName || clientDataMap[treatment.parentId!]?.name || 'Unknown Patient';
-                         const clientPhone = treatment.clientPhone || clientDataMap[treatment.parentId!]?.phone || 'No Phone';
-                         
-                         return (
-                           <motion.div 
-                             key={treatment.id}
-                             initial={{ opacity: 0, y: 10 }}
-                             animate={{ opacity: 1, y: 0 }}
-                             transition={{ delay: idx * 0.05 }}
-                             className="bg-white rounded-2xl border border-brand-primary/20 overflow-hidden shadow-sm hover:shadow-md transition-all group"
-                           >
-                             <div className="p-4 sm:p-6 space-y-4">
-                               <div className="flex items-start justify-between border-b border-slate-50 pb-4">
-                                 <div className="flex items-center gap-4">
-                                   <div className="w-10 h-10 sm:w-12 sm:h-12 rounded-2xl bg-blue-50 text-brand-primary flex items-center justify-center border border-blue-100 flex-shrink-0">
-                                      <Stethoscope size={24} />
-                                   </div>
-                                   <div className="min-w-0">
-                                     <div className="text-base sm:text-lg font-bold text-brand-secondary leading-tight truncate uppercase tracking-tighter">
-                                       {treatment.treatmentName}
-                                     </div>
-                                     <div className="flex flex-wrap items-center gap-x-3 gap-y-1 mt-1">
-                                       <span className="text-xs font-bold text-brand-secondary flex items-center gap-1">
-                                         <Users size={12} className="text-brand-muted" /> {clientName}
-                                       </span>
-                                       <span className="text-xs font-medium text-brand-muted flex items-center gap-1.5">
-                                         <Phone size={12} /> {clientPhone}
-                                       </span>
-                                       <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-emerald-50 text-emerald-600 border border-emerald-100 uppercase tracking-widest">
-                                         Completed
-                                       </span>
-                                     </div>
-                                   </div>
-                                 </div>
-                                 <div className="hidden sm:flex flex-col items-end">
-                                   <div className="text-[10px] font-bold text-brand-muted uppercase tracking-widest mb-1 font-mono">Timestamp</div>
-                                   <div className="text-xs font-bold px-2 py-1 rounded bg-slate-50 text-brand-secondary">
-                                     {treatment.date?.toDate ? format(treatment.date.toDate(), 'h:mm a') : 'Now'}
-                                   </div>
-                                 </div>
-                               </div>
-
-                               <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-                                  <div className="space-y-1">
-                                    <div className="text-[10px] font-bold text-brand-muted uppercase tracking-widest flex items-center gap-1">
-                                      <Zap size={10} className="text-yellow-500" />
-                                      Intensity / Parameters
-                                    </div>
-                                    <div className="text-sm font-bold text-brand-secondary">{treatment.productUsage || 'Standard Protocol'}</div>
-                                  </div>
-                                  <div className="space-y-1">
-                                    <div className="text-[10px] font-bold text-brand-muted uppercase tracking-widest flex items-center gap-1">
-                                      <Stethoscope size={10} className="text-brand-primary" />
-                                      Attending Doctor
-                                    </div>
-                                    <div className="text-sm font-semibold text-brand-secondary">{treatment.doctorName || 'Dr. Consultant'}</div>
-                                  </div>
-                                  <div className="space-y-1">
-                                    <div className="text-[10px] font-bold text-brand-muted uppercase tracking-widest flex items-center gap-1">
-                                      <Calendar size={10} className="text-orange-500" />
-                                      Follow-up Scheduled
-                                    </div>
-                                    <div className="text-sm font-bold text-brand-secondary italic">
-                                      {treatment.followUpDate ? format(treatment.followUpDate.toDate ? treatment.followUpDate.toDate() : new Date(treatment.followUpDate), 'MMM d, yyyy') : 'No Follow-up'}
-                                    </div>
-                                  </div>
-                               </div>
-
-                               {treatment.notes && (
-                                 <div className="bg-slate-50 rounded-2xl p-5 border border-slate-100 mt-2">
-                                   <div className="text-[10px] font-bold text-brand-muted uppercase tracking-widest flex items-center gap-2 mb-3">
-                                     <StickyNote size={12} className="text-brand-primary" />
-                                     Clinical Observations
-                                   </div>
-                                   <p className="text-sm text-brand-secondary leading-relaxed border-l-2 border-brand-primary/20 pl-4 py-1 italic">
-                                     "{treatment.notes}"
-                                   </p>
-                                 </div>
-                               )}
-                               
-                               <div className="flex justify-end gap-3 pt-2">
-                                  <button 
-                                    onClick={() => treatment.parentId && handleSelectClientById(treatment.parentId)}
-                                    className="flex items-center gap-2 px-6 py-2.5 bg-brand-primary text-white rounded-xl text-xs font-bold hover:bg-brand-primary/90 transition-all shadow-lg shadow-brand-primary/10"
-                                  >
-                                    View Full Patient History
-                                  </button>
-                                  <button 
-                                    onClick={() => setConfirmingDeleteId(treatment.id)}
-                                    className="p-2 text-brand-muted hover:text-red-500 transition-colors"
-                                    title="Delete Record"
-                                  >
-                                    <Trash2 size={18} />
-                                  </button>
-                               </div>
-                             </div>
-                           </motion.div>
-                         );
-                       })}
-                     </div>
-                  )}
-                  
-                  {leadsDueList.length > 0 && (
+                   {leadsDueList.length > 0 && (
                      <div className="space-y-4">
                        <div className="flex items-center gap-2 px-2 text-[#2ecc71]">
                          <Bell size={18} />
@@ -1247,17 +1180,149 @@ export default function App() {
                     dueTreatments={dueTreatmentsList}
                     upcomingFollowUps={upcomingFollowUpsList}
                     upcomingInquiries={upcomingLeadsList}
+                    pendingPayments={pendingPaymentsList}
+                    treatmentsToday={treatmentsTodayList}
                     clientDataMap={clientDataMap}
                     onNewPatient={() => setIsFormOpen(true)}
                     onViewNotifications={() => setView('notifications')}
-                    onViewTreatmentsToday={() => setView('notifications')}
+                    onViewTreatmentsToday={() => setView('activity')}
                     onViewMonthSales={() => setView('sales-history')}
                     onSelectPatient={handleSelectClientById}
+                    onFinalizePayment={(t) => setFinalizingPayment(t)}
                     onDeleteTreatment={handleDeleteTreatmentRecord}
                     onMarkLeadVisited={handleMarkLeadVisited}
                     confirmingDeleteId={confirmingDeleteId}
                     setConfirmingDeleteId={setConfirmingDeleteId}
                   />
+                </motion.div>
+              ) : view === 'activity' ? (
+                <motion.div
+                   key="activity"
+                   initial={{ opacity: 0, y: 20 }}
+                   animate={{ opacity: 1, y: 0 }}
+                   className="max-w-4xl mx-auto space-y-6 pb-12"
+                >
+                   <div className="flex items-center justify-between px-2">
+                     <div>
+                       <button onClick={() => setView('dashboard')} className="text-brand-primary text-[10px] font-bold uppercase tracking-widest flex items-center gap-1 mb-1 hover:underline">
+                         ← Back to Dashboard
+                       </button>
+                       <h2 className="text-xl sm:text-2xl font-bold text-brand-secondary tracking-tight">Clinical Activity Today</h2>
+                       <p className="text-brand-muted text-xs sm:text-sm mt-1">Summary of all treatments performed during the current session.</p>
+                     </div>
+                     <div className="bg-brand-primary text-white text-xs font-bold px-3 py-1 rounded-full shadow-lg shadow-brand-primary/20">
+                       {treatmentsTodayList.length} Entries
+                     </div>
+                   </div>
+
+                   {treatmentsTodayList.length > 0 ? (
+                     <div className="space-y-4 pt-2">
+                       {treatmentsTodayList.map((treatment, idx) => {
+                         const clientName = treatment.clientName || clientDataMap[treatment.parentId!]?.name || 'Unknown Patient';
+                         const clientPhone = treatment.clientPhone || clientDataMap[treatment.parentId!]?.phone || 'No Phone';
+                         
+                         return (
+                           <motion.div 
+                             key={treatment.id}
+                             initial={{ opacity: 0, y: 10 }}
+                             animate={{ opacity: 1, y: 0 }}
+                             transition={{ delay: idx * 0.05 }}
+                             className="bg-white rounded-2xl border border-brand-primary/20 overflow-hidden shadow-sm hover:shadow-md transition-all group"
+                           >
+                             <div className="p-4 sm:p-6 space-y-4">
+                               <div className="flex items-start justify-between border-b border-slate-50 pb-4">
+                                 <div className="flex items-center gap-4">
+                                   <div className="w-10 h-10 sm:w-12 sm:h-12 rounded-2xl bg-blue-50 text-brand-primary flex items-center justify-center border border-blue-100 flex-shrink-0">
+                                      <Stethoscope size={24} />
+                                   </div>
+                                   <div className="min-w-0">
+                                     <div className="text-base sm:text-lg font-bold text-brand-secondary leading-tight truncate uppercase tracking-tighter">
+                                       {treatment.treatmentName}
+                                     </div>
+                                     <div className="flex flex-wrap items-center gap-x-3 gap-y-1 mt-1">
+                                       <span className="text-xs font-bold text-brand-secondary flex items-center gap-1">
+                                         <Users size={12} className="text-brand-muted" /> {clientName}
+                                       </span>
+                                       <span className="text-xs font-medium text-brand-muted flex items-center gap-1.5">
+                                         <Phone size={12} /> {clientPhone}
+                                       </span>
+                                       <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-emerald-50 text-emerald-600 border border-emerald-100 uppercase tracking-widest">
+                                         Completed
+                                       </span>
+                                     </div>
+                                   </div>
+                                 </div>
+                                 <div className="hidden sm:flex flex-col items-end">
+                                   <div className="text-[10px] font-bold text-brand-muted uppercase tracking-widest mb-1 font-mono">Timestamp</div>
+                                   <div className="text-xs font-bold px-2 py-1 rounded bg-slate-50 text-brand-secondary">
+                                     {treatment.date?.toDate ? format(treatment.date.toDate(), 'h:mm a') : 'Now'}
+                                   </div>
+                                 </div>
+                               </div>
+
+                               <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                                  <div className="space-y-1">
+                                    <div className="text-[10px] font-bold text-brand-muted uppercase tracking-widest flex items-center gap-1">
+                                      <Zap size={10} className="text-yellow-500" />
+                                      Intensity / Parameters
+                                    </div>
+                                    <div className="text-sm font-bold text-brand-secondary">{treatment.productUsage || 'Standard Protocol'}</div>
+                                  </div>
+                                  <div className="space-y-1">
+                                    <div className="text-[10px] font-bold text-brand-muted uppercase tracking-widest flex items-center gap-1">
+                                      <Stethoscope size={10} className="text-brand-primary" />
+                                      Attending Doctor
+                                    </div>
+                                    <div className="text-sm font-semibold text-brand-secondary">{treatment.doctorName || 'Dr. Consultant'}</div>
+                                  </div>
+                                  <div className="space-y-1">
+                                    <div className="text-[10px] font-bold text-brand-muted uppercase tracking-widest flex items-center gap-1">
+                                      <Calendar size={10} className="text-orange-500" />
+                                      Follow-up Scheduled
+                                    </div>
+                                    <div className="text-sm font-bold text-brand-secondary italic">
+                                      {treatment.followUpDate ? format(treatment.followUpDate.toDate ? treatment.followUpDate.toDate() : new Date(treatment.followUpDate), 'MMM d, yyyy') : 'No Follow-up'}
+                                    </div>
+                                  </div>
+                               </div>
+
+                               {treatment.notes && (
+                                 <div className="bg-slate-50 rounded-2xl p-5 border border-slate-100 mt-2">
+                                   <div className="text-[10px] font-bold text-brand-muted uppercase tracking-widest flex items-center gap-2 mb-3">
+                                     <StickyNote size={12} className="text-brand-primary" />
+                                     Clinical Observations
+                                   </div>
+                                   <p className="text-sm text-brand-secondary leading-relaxed border-l-2 border-brand-primary/20 pl-4 py-1 italic">
+                                     "{treatment.notes}"
+                                   </p>
+                                 </div>
+                               )}
+                               
+                               <div className="flex justify-end gap-3 pt-2">
+                                  <button 
+                                    onClick={() => treatment.parentId && handleSelectClientById(treatment.parentId)}
+                                    className="flex items-center gap-2 px-6 py-2.5 bg-brand-primary text-white rounded-xl text-xs font-bold hover:bg-brand-primary/90 transition-all shadow-lg shadow-brand-primary/10"
+                                  >
+                                    View Full Patient History
+                                  </button>
+                                  <button 
+                                    onClick={() => setConfirmingDeleteId(treatment.id)}
+                                    className="p-2 text-brand-muted hover:text-red-500 transition-colors"
+                                    title="Delete Record"
+                                  >
+                                    <Trash2 size={18} />
+                                  </button>
+                               </div>
+                             </div>
+                           </motion.div>
+                         );
+                       })}
+                     </div>
+                   ) : (
+                     <div className="bg-white rounded-3xl border border-brand-border p-12 text-center shadow-sm">
+                        <p className="text-brand-muted text-sm leading-relaxed">No clinical activity recorded for today yet.</p>
+                     </div>
+                   )}
                 </motion.div>
               ) : view === 'leads' ? (
                 <motion.div
@@ -1294,6 +1359,15 @@ export default function App() {
             userId={user.uid} 
             onClose={() => setIsFormOpen(false)} 
             onSaved={handleClientSaved} 
+          />
+        )}
+
+        {finalizingPayment && user && (
+          <PaymentFinalizationModal 
+            treatment={finalizingPayment}
+            clientName={clientDataMap[finalizingPayment.parentId!]?.name || 'Patient'}
+            onClose={() => setFinalizingPayment(null)}
+            onSuccess={() => setFinalizingPayment(null)}
           />
         )}
 

@@ -855,6 +855,11 @@ export default function ClientDetail({ userId, userRole = 'admin', client, onBac
                           </span>
                         )}
                       </div>
+                      {t.productUsage && (
+                        <div className="text-[9px] font-medium text-brand-muted italic pl-1 leading-tight">
+                          Level: {t.productUsage}
+                        </div>
+                      )}
                       {t.products && t.products.length > 0 && (
                         <div className="flex flex-wrap gap-1">
                           {t.products.map((p, i) => (
