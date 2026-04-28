@@ -1,8 +1,9 @@
 import React, { useState } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
-import { Activity, Users, Calendar, TrendingUp, Clock, ChevronRight, ChevronDown, Plus, History, Stethoscope, Trash2, Tag, MessageSquare, CheckCircle2, IndianRupee, Wallet, Phone, Zap } from 'lucide-react';
+import { Activity, Users, Calendar, TrendingUp, Clock, ChevronRight, ChevronDown, Plus, History, Stethoscope, Trash2, Tag, MessageSquare, CheckCircle2, IndianRupee, Wallet, Phone, Zap, Download, Bell } from 'lucide-react';
 import { format } from 'date-fns';
 import { Client } from '../types';
+import ReminderPanel from './ReminderPanel';
 
 interface DashboardViewProps {
   stats: {
@@ -29,6 +30,7 @@ interface DashboardViewProps {
   onDeleteTreatment: (clientId: string, treatmentId: string) => void;
   onMarkLeadVisited: (leadId: string) => void;
   onWipeAllData?: () => void;
+  onExportData?: (type: 'today' | 'all') => void;
   confirmingDeleteId: string | null;
   setConfirmingDeleteId: (id: string | null) => void;
 }
@@ -52,14 +54,16 @@ export default function DashboardView({
   onDeleteTreatment, 
   onMarkLeadVisited,
   onWipeAllData,
+  onExportData,
   confirmingDeleteId, 
   setConfirmingDeleteId 
 }: DashboardViewProps) {
   const today = format(new Date(), 'EEEE, MMMM do');
   const [showUpcomingInquiries, setShowUpcomingInquiries] = useState(false);
+  const [showExportOptions, setShowExportOptions] = useState(false);
   const [showUpcomingFollowUps, setShowUpcomingFollowUps] = useState(false);
   const [showOutstandingDues, setShowOutstandingDues] = useState(false);
-  const [adminTab, setAdminTab] = useState<'pending' | 'staff' | 'calling'>('pending');
+  const [adminTab, setAdminTab] = useState<'pending' | 'staff' | 'calling' | 'reminders'>('reminders');
 
   return (
     <div className="space-y-6 sm:space-y-8 max-w-7xl mx-auto pb-6">
@@ -70,6 +74,43 @@ export default function DashboardView({
           <p className="text-brand-muted text-xs sm:text-sm mt-1">{today}</p>
         </div>
         <div className="w-full sm:w-auto flex flex-wrap items-center gap-2">
+           {userRole === 'admin' && onExportData && (
+             <div className="relative">
+               <button 
+                 onClick={() => setShowExportOptions(!showExportOptions)}
+                 className="flex items-center justify-center gap-2 px-4 py-2.5 bg-emerald-50 text-emerald-600 rounded-xl text-sm font-bold hover:bg-emerald-100 transition-colors border border-emerald-100/50 shadow-sm"
+               >
+                 <Download size={18} />
+                 Export Records
+                 <ChevronDown size={14} className={`transition-transform duration-200 ${showExportOptions ? 'rotate-180' : ''}`} />
+               </button>
+               
+               <AnimatePresence>
+                 {showExportOptions && (
+                   <motion.div 
+                     initial={{ opacity: 0, y: 10 }}
+                     animate={{ opacity: 1, y: 0 }}
+                     exit={{ opacity: 0, y: 10 }}
+                     className="absolute right-0 mt-2 w-48 bg-white rounded-2xl shadow-xl border border-slate-100 p-2 z-[60]"
+                   >
+                     <button 
+                       onClick={() => { onExportData('today'); setShowExportOptions(false); }}
+                       className="w-full text-left px-4 py-2.5 text-xs font-bold text-brand-secondary hover:bg-emerald-50 hover:text-emerald-600 rounded-xl transition-all flex items-center gap-2"
+                     >
+                       <Calendar size={14} /> Today's Clinical Report
+                     </button>
+                     <button 
+                       onClick={() => { onExportData('all'); setShowExportOptions(false); }}
+                       className="w-full text-left px-4 py-2.5 text-xs font-bold text-brand-secondary hover:bg-emerald-50 hover:text-emerald-600 rounded-xl transition-all flex items-center gap-2"
+                     >
+                       <History size={14} /> Full Clinical History
+                     </button>
+                   </motion.div>
+                 )}
+               </AnimatePresence>
+             </div>
+           )}
+
            {userRole === 'admin' && onWipeAllData && (
              <button 
                onClick={onWipeAllData}
@@ -139,6 +180,7 @@ export default function DashboardView({
             </div>
             <div className="flex bg-white p-1 rounded-xl border border-brand-border shadow-sm">
               {[
+                { id: 'reminders', label: 'Due Reminders', count: 0 },
                 { id: 'pending', label: 'Pending Billing', count: pendingPayments.length },
                 { id: 'staff', label: 'Staff Inputs', count: treatmentsToday.filter(t => t.addedByRole === 'staff').length },
                 { id: 'calling', label: 'Calling updates', count: upcomingInquiries.length + upcomingFollowUps.length }
@@ -165,6 +207,17 @@ export default function DashboardView({
 
           <div className="p-4 sm:p-6">
             <AnimatePresence mode="wait">
+              {adminTab === 'reminders' && (
+                <motion.div 
+                  key="reminders"
+                  initial={{ opacity: 0, x: -10 }}
+                  animate={{ opacity: 1, x: 0 }}
+                  exit={{ opacity: 0, x: 10 }}
+                >
+                  <ReminderPanel userId={recentTreatments[0]?.ownerId || ''} />
+                </motion.div>
+              )}
+
               {adminTab === 'pending' && (
                 <motion.div 
                   key="pending"

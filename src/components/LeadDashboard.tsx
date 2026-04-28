@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { db } from '../lib/firebase';
 import { collection, query, where, onSnapshot, orderBy, limit, doc, deleteDoc, serverTimestamp, updateDoc } from 'firebase/firestore';
-import { Search, UserPlus, Phone, Calendar, ClipboardList, Plus, ChevronRight, RefreshCw, Trash2, Clock, AlertTriangle, CheckCircle2, Tag, MessageSquare } from 'lucide-react';
+import { Search, UserPlus, Phone, Calendar, ClipboardList, Plus, ChevronRight, RefreshCw, Trash2, Clock, AlertTriangle, CheckCircle2, Tag, MessageSquare, Pencil, MessageCircle } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { format, isToday, isPast, isFuture } from 'date-fns';
 import { Lead } from '../types';
@@ -249,6 +249,20 @@ export default function LeadDashboard({ userId, onMarkVisited, onRequestDeleteLe
                               <Phone size={18} />
                             </a>
                             <button
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                const dateStr = format(apptDate, 'dd MMM (EEEE)');
+                                const message = `Hi ${lead.name}! Just a quick reminder from Alesta Wellness about your scheduled visit on ${dateStr}. Please let us know if you have any questions!`;
+                                const encodedMsg = encodeURIComponent(message);
+                                const phone = lead.phone.replace(/\D/g, '');
+                                window.open(`https://wa.me/${phone.startsWith('91') ? phone : '91' + phone}?text=${encodedMsg}`, '_blank');
+                              }}
+                              className="p-2.5 bg-emerald-50 text-[#25D366] rounded-xl hover:bg-emerald-100 transition-colors flex items-center justify-center"
+                              title="Send WhatsApp Reminder"
+                            >
+                              <MessageCircle size={18} />
+                            </button>
+                            <button
                               onClick={(e) => handleMarkVisitedClick(e, lead.id!)}
                               className="p-2.5 bg-emerald-50 text-emerald-600 rounded-xl hover:bg-emerald-100 transition-colors hidden sm:flex"
                               title="Mark as Visited"
@@ -258,9 +272,9 @@ export default function LeadDashboard({ userId, onMarkVisited, onRequestDeleteLe
                             <button
                               onClick={() => { setSelectedLead(lead); setIsFormOpen(true); }}
                               className="p-2.5 bg-blue-50 text-brand-primary rounded-xl hover:bg-blue-100 transition-colors"
-                              title="Reschedule / Edit"
+                              title="Edit Inquiry"
                             >
-                              <RefreshCw size={18} />
+                              <Pencil size={18} />
                             </button>
                             <button
                               onClick={(e) => { e.stopPropagation(); setConfirmingDeleteId(lead.id!); }}

@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { User } from 'firebase/auth';
-import { Leaf, Users, LayoutDashboard, Bell, Activity, Calendar, ChevronRight, Phone, Zap, StickyNote, CheckCircle2, MapPin, Stethoscope, Tag, MessageSquare, AlertTriangle, RefreshCw, Trash2, Clock, History, IndianRupee } from 'lucide-react';
+import { Leaf, Users, LayoutDashboard, Bell, Activity, Calendar, ChevronRight, Phone, Zap, StickyNote, CheckCircle2, MapPin, Stethoscope, Tag, MessageSquare, AlertTriangle, RefreshCw, Trash2, Clock, History, IndianRupee, MessageCircle } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { db } from './lib/firebase';
 import { collection, collectionGroup, query, where, onSnapshot, orderBy, limit, doc, getDoc, getDocs, updateDoc, deleteDoc, serverTimestamp, addDoc } from 'firebase/firestore';
@@ -573,6 +573,69 @@ export default function App() {
     });
   };
 
+  const handleExportData = async (type: 'today' | 'all') => {
+    if (!user) return;
+    
+    try {
+      const { exportToExcel, prepareTreatmentDataForExport, prepareLeadDataForExport } = await import('./lib/exportUtils');
+      const startOfToday = startOfDay(new Date());
+      const endOfToday = endOfDay(new Date());
+
+      let treatmentData: any[] = [];
+      let leadData: any[] = [];
+
+      if (type === 'today') {
+        treatmentData = prepareTreatmentDataForExport(treatmentsTodayList, clientDataMap);
+        
+        // Fetch leads created or appointed for today
+        const leadsQ = query(
+          collection(db, 'leads'),
+          where('ownerId', '==', user.uid),
+          where('createdAt', '>=', startOfToday),
+          where('createdAt', '<=', endOfToday)
+        );
+        const leadsSnapshot = await getDocs(leadsQ);
+        const todayLeads = leadsSnapshot.docs.map(d => ({ id: d.id, ...d.data() }));
+        leadData = prepareLeadDataForExport(todayLeads);
+
+        exportToExcel([
+          { data: treatmentData, name: 'Clinical Records' },
+          { data: leadData, name: 'Inquiries' }
+        ], 'Daily_Report');
+      } else {
+        // Fetch all treatments (limit 2000 for safety)
+        const treatmentsQ = query(
+          collectionGroup(db, 'treatments'),
+          where('ownerId', '==', user.uid),
+          orderBy('date', 'desc'),
+          limit(2000)
+        );
+        const treatmentsSnapshot = await getDocs(treatmentsQ);
+        const allTreatments = treatmentsSnapshot.docs.map(d => ({ id: d.id, ...d.data() }));
+        treatmentData = prepareTreatmentDataForExport(allTreatments, clientDataMap);
+
+        // Fetch all leads
+        const leadsQ = query(
+          collection(db, 'leads'),
+          where('ownerId', '==', user.uid),
+          orderBy('createdAt', 'desc'),
+          limit(1000)
+        );
+        const leadsSnapshot = await getDocs(leadsQ);
+        const allLeads = leadsSnapshot.docs.map(d => ({ id: d.id, ...d.data() }));
+        leadData = prepareLeadDataForExport(allLeads);
+        
+        exportToExcel([
+          { data: treatmentData, name: 'Clinical Records' },
+          { data: leadData, name: 'Inquiries' }
+        ], 'Master_Data_Export');
+      }
+    } catch (error) {
+      console.error("Export failed:", error);
+      alert("Failed to export data. See console for details.");
+    }
+  };
+
   const handleRescheduleClient = async (client: Client) => {
     if (!user || !client.id) return;
     try {
@@ -908,6 +971,19 @@ export default function App() {
                                     ) : (
                                       <>
                                         <button 
+                                          onClick={() => {
+                                            const dateStr = format(apptDate, 'dd MMM (EEEE)');
+                                            const message = `Hi ${lead.name}! Just a quick reminder from Alesta Wellness about your scheduled visit on ${dateStr}. Please let us know if you have any questions!`;
+                                            const encodedMsg = encodeURIComponent(message);
+                                            const phone = lead.phone.replace(/\D/g, '');
+                                            window.open(`https://wa.me/${phone.startsWith('91') ? phone : '91' + phone}?text=${encodedMsg}`, '_blank');
+                                          }}
+                                          className="flex-1 sm:flex-none flex items-center justify-center gap-2 px-4 py-2 bg-emerald-50 text-[#25D366] border border-emerald-100 rounded-lg text-xs font-bold hover:bg-emerald-100 transition-all shadow-sm"
+                                          title="Send WhatsApp Reminder"
+                                        >
+                                          <MessageCircle size={14} /> WhatsApp
+                                        </button>
+                                        <button 
                                           onClick={() => setRescheduleData({ type: 'lead', data: lead })}
                                           className="flex-1 sm:flex-none flex items-center justify-center gap-2 px-4 py-2 bg-white border border-brand-border rounded-lg text-xs font-bold text-brand-secondary hover:border-brand-primary/30 transition-all shadow-sm"
                                         >
@@ -1144,6 +1220,22 @@ export default function App() {
                                   ) : (
                                     <>
                                       <button 
+                                        onClick={() => {
+                                          const phoneValue = item.clientPhone || clientDataMap[item.parentId!]?.phone || '';
+                                          const nameValue = item.clientName || clientDataMap[item.parentId!]?.name || 'Patient';
+                                          const fDate = item.followUpDate?.toDate ? item.followUpDate.toDate() : new Date(item.followUpDate);
+                                          const dateStr = format(fDate, 'dd MMM (EEEE)');
+                                          const message = `Hello ${nameValue}, this is Alesta Wellness. Your follow-up session for ${item.treatmentName} is due on ${dateStr}. Looking forward to seeing you!`;
+                                          const encodedMsg = encodeURIComponent(message);
+                                          const phone = phoneValue.replace(/\D/g, '');
+                                          window.open(`https://wa.me/${phone.startsWith('91') ? phone : '91' + phone}?text=${encodedMsg}`, '_blank');
+                                        }}
+                                        className="flex-1 sm:flex-none flex items-center justify-center gap-2 px-4 py-2 bg-emerald-50 text-[#25D366] border border-emerald-100 rounded-lg text-xs font-bold hover:bg-emerald-100 transition-all shadow-sm"
+                                        title="Send WhatsApp Reminder"
+                                      >
+                                        <MessageCircle size={14} /> WhatsApp
+                                      </button>
+                                      <button 
                                         onClick={() => setRescheduleData({ type: 'followup', data: item })}
                                         className="flex-1 sm:flex-none flex items-center justify-center gap-2 px-4 py-2 bg-white border border-brand-border rounded-lg text-xs font-bold text-brand-secondary hover:border-brand-primary/30 transition-all shadow-sm"
                                       >
@@ -1302,6 +1394,7 @@ export default function App() {
                     confirmingDeleteId={confirmingDeleteId}
                     setConfirmingDeleteId={setConfirmingDeleteId}
                     onWipeAllData={handleWipeAllData}
+                    onExportData={handleExportData}
                   />
                 </motion.div>
               ) : view === 'activity' ? (

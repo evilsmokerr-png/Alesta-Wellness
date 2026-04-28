@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { db } from '../lib/firebase';
 import { collection, query, where, orderBy, getDocs, addDoc, serverTimestamp, doc, updateDoc, deleteDoc, onSnapshot } from 'firebase/firestore';
-import { ArrowLeft, Plus, History, Package, Zap, StickyNote, Save, CheckCircle2, ChevronDown, ChevronUp, Stethoscope, Trash2, AlertCircle, ShoppingCart, CreditCard, Banknote, Receipt, Percent, Tag as TagIcon, X, Phone, Smartphone, Pencil, RotateCcw } from 'lucide-react';
+import { ArrowLeft, Plus, History, Package, Zap, StickyNote, Save, CheckCircle2, ChevronDown, ChevronUp, Stethoscope, Trash2, AlertCircle, ShoppingCart, CreditCard, Banknote, Receipt, Percent, Tag as TagIcon, X, Phone, Smartphone, Pencil, RotateCcw, Download, MessageCircle } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { format, addDays, parseISO, differenceInDays } from 'date-fns';
 import { Client, Treatment } from '../types';
@@ -39,6 +39,8 @@ export default function ClientDetail({
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const [confirmingTreatmentId, setConfirmingTreatmentId] = useState<string | null>(null);
   const [editingTreatmentId, setEditingTreatmentId] = useState<string | null>(null);
+  const [isEditingProfile, setIsEditingProfile] = useState(false);
+  const [editProfileData, setEditProfileData] = useState({ name: client.name, phone: client.phone, address: client.address || '' });
   const [splitPayments, setSplitPayments] = useState<{method: 'Cash' | 'PhonePe' | 'POS' | 'POS QR Code', amount: number}[]>([]);
 
   // Suggestion states
@@ -292,6 +294,24 @@ export default function ClientDetail({
     }
   };
 
+  const handleUpdateProfile = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!client.id) return;
+    
+    try {
+      await updateDoc(doc(db, 'clients', client.id), {
+        ...editProfileData,
+        updatedAt: serverTimestamp()
+      });
+      onUpdate({ ...client, ...editProfileData });
+      setIsEditingProfile(false);
+      alert("Patient profile updated successfully");
+    } catch (error) {
+      console.error("Error updating profile:", error);
+      alert("Failed to update profile");
+    }
+  };
+
   const handleDeleteClient = () => {
     if (!client.id || !onRequestDeleteClient) return;
     onRequestDeleteClient(client.id);
@@ -315,86 +335,143 @@ export default function ClientDetail({
             Back
           </button>
           <div className="h-4 w-[1px] bg-brand-border hidden sm:block"></div>
-          <button 
-            onClick={() => {
-              if (isAddingTreatment) {
-                resetForm();
-                setIsAddingTreatment(false);
-              } else {
-                setIsAddingTreatment(true);
-              }
-            }}
-            className={`flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-bold transition-all shadow-lg ${
-              isAddingTreatment 
-                ? 'bg-slate-100 text-brand-secondary border border-brand-border' 
-                : 'bg-brand-primary text-white shadow-brand-primary/20 hover:scale-105 active:scale-95'
-            }`}
-          >
-            {isAddingTreatment ? (
-              <><X size={14} /> Cancel Entry</>
-            ) : (
-              <><Plus size={14} /> Add New Treatment</>
+          <div className="flex items-center gap-1.5">
+            <button 
+              onClick={() => {
+                if (isAddingTreatment) {
+                  resetForm();
+                  setIsAddingTreatment(false);
+                } else {
+                  setIsAddingTreatment(true);
+                }
+              }}
+              className={`flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-bold transition-all shadow-lg ${
+                isAddingTreatment 
+                  ? 'bg-slate-100 text-brand-secondary border border-brand-border' 
+                  : 'bg-brand-primary text-white shadow-brand-primary/20 hover:scale-105 active:scale-95'
+              }`}
+            >
+              {isAddingTreatment ? (
+                <><X size={14} /> Cancel Entry</>
+              ) : (
+                <><Plus size={14} /> Add New Treatment</>
+              )}
+            </button>
+
+            {!isAddingTreatment && (
+              <button 
+                onClick={() => {
+                  import('../lib/exportUtils').then(m => {
+                    const data = m.prepareTreatmentDataForExport(treatments, { [client.id!]: client });
+                    m.exportToExcel([{ data, name: 'Medical History' }], `History_${client.name.replace(/\s+/g, '_')}`);
+                  });
+                }}
+                className="px-4 py-2 bg-white border border-brand-border rounded-xl text-xs font-bold text-brand-secondary hover:bg-slate-50 transition-all flex items-center gap-2"
+                title="Export History to Excel"
+              >
+                <Download size={14} className="text-emerald-500" />
+                History
+              </button>
             )}
-          </button>
+          </div>
         </div>
 
-        {!showDeleteConfirm ? (
-          <button 
-            onClick={() => setShowDeleteConfirm(true)}
-            className="flex items-center gap-2 text-[10px] font-bold text-red-400 hover:text-red-600 uppercase tracking-widest transition-colors px-3 py-1.5 rounded-lg border border-red-50 hover:bg-red-50"
-          >
-            <Trash2 size={12} />
-            Delete Patient Record
-          </button>
-        ) : (
-          <div className="flex items-center gap-3 bg-red-50 p-2 rounded-xl border border-red-100 animate-in fade-in slide-in-from-right-2 duration-300">
-            <div className="flex items-center gap-2 px-2 text-red-600 font-bold text-[10px] uppercase tracking-widest">
-              <AlertCircle size={14} />
-              Confirm Deletion?
-            </div>
-            <div className="flex gap-1.5">
-              <button 
-                onClick={handleDeleteClient}
-                disabled={isDeleting}
-                className="bg-red-600 text-white px-3 py-1.5 rounded-lg text-xs font-bold hover:bg-red-700 transition-all shadow-sm"
-              >
-                {isDeleting ? 'Deleting...' : 'Yes, Delete'}
-              </button>
-              <button 
-                onClick={() => setShowDeleteConfirm(false)}
-                className="bg-white text-brand-muted px-3 py-1.5 rounded-lg text-xs font-bold border border-red-200 hover:bg-slate-50 transition-all"
-              >
-                Cancel
-              </button>
-            </div>
-          </div>
-        )}
+        <button 
+          onClick={handleDeleteClient}
+          className="flex items-center gap-2 text-[10px] font-bold text-red-100 hover:text-red-600 bg-red-600/10 hover:bg-red-50 uppercase tracking-widest transition-colors px-3 py-1.5 rounded-lg border border-red-100/50"
+        >
+          <Trash2 size={12} />
+          Delete Patient Record
+        </button>
       </div>
 
       {/* Client Profile Card */}
       <div className="section-card">
-        <div className="section-title">Patient Profile</div>
+        <div className="section-title flex justify-between items-center">
+          <span>Patient Profile</span>
+          {!isEditingProfile && (
+            <button 
+              onClick={() => {
+                setEditProfileData({ name: client.name, phone: client.phone, address: client.address || '' });
+                setIsEditingProfile(true);
+              }}
+              className="px-3 py-1 bg-white border border-brand-border rounded-lg text-[10px] font-bold text-brand-primary hover:bg-brand-primary hover:text-white transition-all flex items-center gap-1.5"
+            >
+              <Pencil size={12} />
+              Edit Profile
+            </button>
+          )}
+        </div>
         <div className="p-5 sm:p-8">
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6 sm:gap-8">
-            <div className="space-y-1">
-              <label className="text-[10px] font-bold text-brand-muted uppercase tracking-wider block">Full Name</label>
-              <span className="text-sm sm:text-base font-bold text-brand-secondary">{client.name}</span>
+          {isEditingProfile ? (
+            <form onSubmit={handleUpdateProfile} className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6 items-end">
+              <div className="space-y-1.5">
+                <label className="text-[10px] font-bold text-brand-muted uppercase tracking-widest block ml-1">Full Name</label>
+                <input 
+                  type="text"
+                  className="w-full px-4 py-2 bg-slate-50 border border-brand-border rounded-xl text-sm focus:border-brand-primary outline-none font-bold text-brand-secondary"
+                  value={editProfileData.name}
+                  onChange={(e) => setEditProfileData({ ...editProfileData, name: e.target.value })}
+                  required
+                />
+              </div>
+              <div className="space-y-1.5">
+                <label className="text-[10px] font-bold text-brand-muted uppercase tracking-widest block ml-1">Phone Number</label>
+                <input 
+                  type="text"
+                  className="w-full px-4 py-2 bg-slate-50 border border-brand-border rounded-xl text-sm focus:border-brand-primary outline-none font-medium text-brand-secondary"
+                  value={editProfileData.phone}
+                  onChange={(e) => setEditProfileData({ ...editProfileData, phone: e.target.value })}
+                  required
+                />
+              </div>
+              <div className="space-y-1.5">
+                <label className="text-[10px] font-bold text-brand-muted uppercase tracking-widest block ml-1">Home Address</label>
+                <input 
+                  type="text"
+                  className="w-full px-4 py-2 bg-slate-50 border border-brand-border rounded-xl text-sm focus:border-brand-primary outline-none font-medium text-brand-secondary"
+                  value={editProfileData.address}
+                  onChange={(e) => setEditProfileData({ ...editProfileData, address: e.target.value })}
+                />
+              </div>
+              <div className="flex gap-2">
+                <button 
+                  type="submit"
+                  className="flex-1 py-2 bg-brand-primary text-white rounded-xl text-[10px] font-bold hover:bg-brand-primary/90 transition-all shadow-md"
+                >
+                  Save Changes
+                </button>
+                <button 
+                  type="button"
+                  onClick={() => setIsEditingProfile(false)}
+                  className="px-4 py-2 bg-slate-100 text-brand-muted rounded-xl text-[10px] font-bold hover:bg-slate-200 transition-all"
+                >
+                  Cancel
+                </button>
+              </div>
+            </form>
+          ) : (
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6 sm:gap-8">
+              <div className="space-y-1">
+                <label className="text-[10px] font-bold text-brand-muted uppercase tracking-wider block">Full Name</label>
+                <span className="text-sm sm:text-base font-bold text-brand-secondary">{client.name}</span>
+              </div>
+              <div className="space-y-1">
+                <label className="text-[10px] font-bold text-brand-muted uppercase tracking-wider block">Phone Number</label>
+                <span className="mono text-xs sm:text-sm text-brand-secondary font-medium">{client.phone}</span>
+              </div>
+              <div className="space-y-1">
+                <label className="text-[10px] font-bold text-brand-muted uppercase tracking-wider block">Home Address</label>
+                <span className="text-xs sm:text-sm font-medium text-brand-secondary truncate block">{client.address || 'N/A'}</span>
+              </div>
+              <div className="space-y-1">
+                <label className="text-[10px] font-bold text-brand-muted uppercase tracking-wider block">Member Since</label>
+                <span className="text-xs sm:text-sm font-medium text-brand-secondary block">
+                  {client.createdAt?.toDate ? format(client.createdAt.toDate(), 'MMM d, yyyy') : 'Recent'}
+                </span>
+              </div>
             </div>
-            <div className="space-y-1">
-              <label className="text-[10px] font-bold text-brand-muted uppercase tracking-wider block">Phone Number</label>
-              <span className="mono text-xs sm:text-sm text-brand-secondary font-medium">{client.phone}</span>
-            </div>
-            <div className="space-y-1">
-              <label className="text-[10px] font-bold text-brand-muted uppercase tracking-wider block">Home Address</label>
-              <span className="text-xs sm:text-sm font-medium text-brand-secondary truncate block">{client.address || 'N/A'}</span>
-            </div>
-            <div className="space-y-1">
-              <label className="text-[10px] font-bold text-brand-muted uppercase tracking-wider block">Member Since</label>
-              <span className="text-xs sm:text-sm font-medium text-brand-secondary block">
-                {client.createdAt?.toDate ? format(client.createdAt.toDate(), 'MMM d, yyyy') : 'Recent'}
-              </span>
-            </div>
-          </div>
+          )}
         </div>
       </div>
 
@@ -895,11 +972,20 @@ export default function ClientDetail({
                       ₹{(totalAmount - (splitPayments.length > 0 ? splitPayments.reduce((acc, p) => acc + p.amount, 0) : newTreatment.paidAmount)).toFixed(2)}
                     </span>
                   </div>
-                  </div>
+
+                  <button
+                    disabled={isLogging}
+                    type="submit"
+                    className="w-full py-4 bg-brand-primary text-white rounded-xl text-sm font-bold shadow-lg shadow-brand-primary/20 hover:scale-[1.01] active:scale-[0.99] transition-all flex items-center justify-center gap-2"
+                  >
+                    <Save size={18} />
+                    {isLogging ? 'Processing...' : (editingTreatmentId ? 'Update Record' : 'Save Treatment Record')}
+                  </button>
                 </div>
               </div>
             </div>
           </div>
+        </div>
         ) : (
           <div className="px-5 sm:px-8 pb-8 pt-4">
             <div className="bg-blue-50 border border-blue-100 p-6 rounded-2xl flex items-start gap-4">
