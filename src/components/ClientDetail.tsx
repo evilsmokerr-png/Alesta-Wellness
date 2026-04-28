@@ -3,18 +3,19 @@ import { db } from '../lib/firebase';
 import { collection, query, where, orderBy, getDocs, addDoc, serverTimestamp, doc, updateDoc, deleteDoc } from 'firebase/firestore';
 import { ArrowLeft, Plus, History, Package, Zap, StickyNote, Save, CheckCircle2, ChevronDown, ChevronUp, Stethoscope, Trash2, AlertCircle, ShoppingCart, CreditCard, Banknote, Receipt, Percent, Tag as TagIcon, X, Phone, Smartphone, Pencil, RotateCcw } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
-import { format } from 'date-fns';
+import { format, addDays, parseISO, differenceInDays } from 'date-fns';
 import { Client, Treatment } from '../types';
 import { handleFirestoreError } from '../lib/errorHandlers';
 
 interface ClientDetailProps {
   userId: string;
+  userRole?: 'admin' | 'staff';
   client: Client;
   onBack: () => void;
   onUpdate: (client: Client) => void;
 }
 
-export default function ClientDetail({ userId, client, onBack, onUpdate }: ClientDetailProps) {
+export default function ClientDetail({ userId, userRole = 'admin', client, onBack, onUpdate }: ClientDetailProps) {
   const [treatments, setTreatments] = useState<Treatment[]>([]);
   const [loading, setLoading] = useState(true);
   const [showHistory, setShowHistory] = useState(false);
@@ -23,6 +24,7 @@ export default function ClientDetail({ userId, client, onBack, onUpdate }: Clien
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const [confirmingTreatmentId, setConfirmingTreatmentId] = useState<string | null>(null);
   const [editingTreatmentId, setEditingTreatmentId] = useState<string | null>(null);
+  const [splitPayments, setSplitPayments] = useState<{method: 'Cash' | 'PhonePe' | 'POS' | 'POS QR Code', amount: number}[]>([]);
 
   const [newTreatment, setNewTreatment] = useState({
     treatmentName: '',
@@ -30,6 +32,7 @@ export default function ClientDetail({ userId, client, onBack, onUpdate }: Clien
     doctorName: '',
     date: format(new Date(), 'yyyy-MM-dd'),
     followUpDate: '',
+    followUpDays: '',
     notes: '',
     paidAmount: 0,
     paymentMethod: 'Cash' as 'Cash' | 'PhonePe' | 'POS' | 'POS QR Code',
@@ -89,6 +92,7 @@ export default function ClientDetail({ userId, client, onBack, onUpdate }: Clien
 
     // Support for the "current" service if not yet explicitly added to list
     let currentServiceTotal = 0;
+    // Don't count current service if we're editing and have a services list (already in the list)
     if (newTreatment.treatmentName.trim()) {
       const sMRP = newTreatment.serviceMRP || 0;
       const sDisc = newTreatment.serviceDiscount || 0;
@@ -106,21 +110,30 @@ export default function ClientDetail({ userId, client, onBack, onUpdate }: Clien
     setEditingTreatmentId(t.id || null);
     const loadedServices = t.services || [];
     setServicesList(loadedServices);
+    setProductList(t.products || []);
+    setSplitPayments(t.splitPayments || []);
     
+    // Fix for double billing: If services list exists, don't populate the specific service fields
+    // to avoid adding them twice in calculateTotal
+    const fDate = t.followUpDate ? (t.followUpDate instanceof Date ? t.followUpDate : t.followUpDate.toDate()) : null;
+    const tDate = t.date instanceof Date ? t.date : t.date.toDate();
+    const days = fDate ? differenceInDays(fDate, tDate).toString() : '';
+
     setNewTreatment({
-      treatmentName: t.treatmentName,
-      productUsage: t.productUsage || '',
+      treatmentName: loadedServices.length > 0 ? '' : t.treatmentName,
+      productUsage: loadedServices.length > 0 ? '' : (t.productUsage || ''),
       doctorName: t.doctorName || '',
-      date: format(t.date instanceof Date ? t.date : t.date.toDate(), 'yyyy-MM-dd'),
-      followUpDate: t.followUpDate ? format(t.followUpDate instanceof Date ? t.followUpDate : t.followUpDate.toDate(), 'yyyy-MM-dd') : '',
+      date: format(tDate, 'yyyy-MM-dd'),
+      followUpDate: fDate ? format(fDate, 'yyyy-MM-dd') : '',
+      followUpDays: days,
       notes: t.notes || '',
       paidAmount: t.paidAmount || 0,
       paymentMethod: t.paymentMethod || 'Cash',
-      serviceMRP: t.serviceMRP || 0,
-      serviceDiscount: t.serviceDiscount || 0,
-      serviceDiscountType: t.serviceDiscountType || 'percentage',
+      serviceMRP: loadedServices.length > 0 ? 0 : (t.serviceMRP || 0),
+      serviceDiscount: loadedServices.length > 0 ? 0 : (t.serviceDiscount || 0),
+      serviceDiscountType: loadedServices.length > 0 ? 'percentage' : (t.serviceDiscountType || 'percentage'),
     });
-    setProductList(t.products || []);
+    
     setShowHistory(false); // Scroll up to form
     window.scrollTo({ top: 0, behavior: 'smooth' });
   };
@@ -128,12 +141,14 @@ export default function ClientDetail({ userId, client, onBack, onUpdate }: Clien
   const resetForm = () => {
     setEditingTreatmentId(null);
     setServicesList([]);
+    setSplitPayments([]);
     setNewTreatment({
       treatmentName: '',
       productUsage: '',
       doctorName: '',
       date: format(new Date(), 'yyyy-MM-dd'),
       followUpDate: '',
+      followUpDays: '',
       notes: '',
       paidAmount: 0,
       paymentMethod: 'Cash',
@@ -207,8 +222,12 @@ export default function ClientDetail({ userId, client, onBack, onUpdate }: Clien
         followUpDate: newTreatment.followUpDate ? new Date(newTreatment.followUpDate) : null,
         products: productList,
         services: finalServices,
-        totalAmount,
-        balanceAmount: totalAmount - (newTreatment.paidAmount || 0),
+        splitPayments: splitPayments,
+        totalAmount: userRole === 'staff' ? 0 : totalAmount,
+        paidAmount: userRole === 'staff' ? 0 : (splitPayments.length > 0 ? splitPayments.reduce((acc, p) => acc + p.amount, 0) : newTreatment.paidAmount),
+        balanceAmount: userRole === 'staff' ? 0 : (totalAmount - (splitPayments.length > 0 ? splitPayments.reduce((acc, p) => acc + p.amount, 0) : (newTreatment.paidAmount || 0))),
+        paymentPending: userRole === 'staff' || (totalAmount > 0 && (totalAmount - (splitPayments.length > 0 ? splitPayments.reduce((acc, p) => acc + p.amount, 0) : (newTreatment.paidAmount || 0))) > 0),
+        addedByRole: userRole,
         updatedAt: serverTimestamp(),
       };
 
@@ -362,7 +381,6 @@ export default function ClientDetail({ userId, client, onBack, onUpdate }: Clien
               <div className="sm:col-span-1 lg:col-span-1 space-y-1.5">
                 <label className="text-[10px] font-bold text-brand-muted uppercase tracking-widest block ml-1">Treatment Name</label>
                 <input
-                  required
                   type="text"
                   placeholder="Laser Resurfacing"
                   className="w-full px-4 py-2.5 bg-white border border-brand-border rounded-xl text-base sm:text-sm focus:ring-2 focus:ring-brand-primary/10 focus:border-brand-primary transition-all outline-none"
@@ -395,13 +413,29 @@ export default function ClientDetail({ userId, client, onBack, onUpdate }: Clien
             </div>
 
             <div className="space-y-1.5">
-              <label className="text-[10px] font-bold text-brand-muted uppercase tracking-widest block ml-1">Follow-up</label>
-              <input
-                type="date"
-                className="w-full px-4 py-2.5 bg-white border border-brand-border rounded-xl text-base sm:text-sm focus:ring-2 focus:ring-brand-primary/10 focus:border-brand-primary transition-all outline-none"
-                value={newTreatment.followUpDate}
-                onChange={(e) => setNewTreatment({ ...newTreatment, followUpDate: e.target.value })}
-              />
+              <label className="text-[10px] font-bold text-brand-muted uppercase tracking-widest block ml-1">Follow-up (After Days)</label>
+              <div className="relative">
+                <input
+                  type="number"
+                  placeholder="e.g. 4"
+                  className="w-full px-4 py-2.5 bg-white border border-brand-border rounded-xl text-base sm:text-sm focus:ring-2 focus:ring-brand-primary/10 focus:border-brand-primary transition-all outline-none"
+                  value={newTreatment.followUpDays}
+                  onChange={(e) => {
+                    const days = e.target.value;
+                    const daysNum = parseInt(days);
+                    let computedDate = '';
+                    if (!isNaN(daysNum)) {
+                      computedDate = format(addDays(parseISO(newTreatment.date), daysNum), 'yyyy-MM-dd');
+                    }
+                    setNewTreatment({ ...newTreatment, followUpDays: days, followUpDate: computedDate });
+                  }}
+                />
+                {newTreatment.followUpDate && (
+                  <div className="mt-1 ml-1 text-[9px] font-bold text-brand-primary">
+                    Calculated Date: {format(parseISO(newTreatment.followUpDate), 'dd-MMM-yyyy')}
+                  </div>
+                )}
+              </div>
             </div>
 
             <div className="space-y-1.5">
@@ -425,72 +459,74 @@ export default function ClientDetail({ userId, client, onBack, onUpdate }: Clien
             </div>
           </div>
 
-            <div className="flex flex-col sm:flex-row gap-6 items-start pt-4 border-t border-slate-50">
-              <div className="w-full sm:w-[180px] space-y-1.5">
-                <label className="text-[10px] font-bold text-brand-muted uppercase tracking-widest block ml-1">Service MRP (Fees)</label>
-                <div className="relative">
-                  <span className="absolute left-3 top-1/2 -translate-y-1/2 text-xs font-bold text-brand-muted">₹</span>
-                  <input
-                    type="number"
-                    placeholder="0.00"
-                    className="w-full pl-7 pr-4 py-2 bg-white border border-brand-border rounded-xl text-base sm:text-sm focus:ring-2 focus:ring-brand-primary/10 focus:border-brand-primary transition-all outline-none font-mono"
-                    value={newTreatment.serviceMRP || ''}
-                    onChange={(e) => setNewTreatment({ ...newTreatment, serviceMRP: parseFloat(e.target.value) || 0 })}
-                  />
-                </div>
-              </div>
-
-              <div className="w-full sm:w-[220px] space-y-1.5">
-                <label className="text-[10px] font-bold text-brand-muted uppercase tracking-widest block ml-1">Discount Type & Value</label>
-                <div className="flex gap-2">
-                  <div className="flex bg-slate-100 p-1 rounded-xl w-[90px]">
-                    <button
-                      type="button"
-                      onClick={() => setNewTreatment({ ...newTreatment, serviceDiscountType: 'percentage' })}
-                      className={`flex-1 flex items-center justify-center rounded-lg py-1.5 text-[10px] font-black transition-all ${
-                        newTreatment.serviceDiscountType === 'percentage' 
-                          ? 'bg-blue-600 text-white shadow-sm' 
-                          : 'text-slate-400 hover:text-slate-600'
-                      }`}
-                    >
-                      %
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => setNewTreatment({ ...newTreatment, serviceDiscountType: 'fixed' })}
-                      className={`flex-1 flex items-center justify-center rounded-lg py-1.5 text-[10px] font-black transition-all ${
-                        newTreatment.serviceDiscountType === 'fixed' 
-                          ? 'bg-emerald-600 text-white shadow-sm' 
-                          : 'text-slate-400 hover:text-slate-600'
-                      }`}
-                    >
-                      INR
-                    </button>
-                  </div>
-                  <div className="flex-1 flex bg-white border border-brand-border rounded-xl overflow-hidden focus-within:border-brand-primary transition-all">
-                    <span className="pl-3 py-2 text-[10px] font-bold text-brand-muted flex items-center">{newTreatment.serviceDiscountType === 'percentage' ? '%' : '₹'}</span>
+            {userRole === 'admin' && (
+              <div className="flex flex-col sm:flex-row gap-6 items-start pt-4 border-t border-slate-50">
+                <div className="w-full sm:w-[180px] space-y-1.5">
+                  <label className="text-[10px] font-bold text-brand-muted uppercase tracking-widest block ml-1">Service MRP (Fees)</label>
+                  <div className="relative">
+                    <span className="absolute left-3 top-1/2 -translate-y-1/2 text-xs font-bold text-brand-muted">₹</span>
                     <input
                       type="number"
-                      placeholder="0"
-                      className="w-full px-2 py-2 text-base sm:text-sm outline-none font-mono"
-                      value={newTreatment.serviceDiscount || ''}
-                      onChange={(e) => setNewTreatment({ ...newTreatment, serviceDiscount: parseFloat(e.target.value) || 0 })}
+                      placeholder="0.00"
+                      className="w-full pl-7 pr-4 py-2 bg-white border border-brand-border rounded-xl text-base sm:text-sm focus:ring-2 focus:ring-brand-primary/10 focus:border-brand-primary transition-all outline-none font-mono"
+                      value={newTreatment.serviceMRP || ''}
+                      onChange={(e) => setNewTreatment({ ...newTreatment, serviceMRP: parseFloat(e.target.value) || 0 })}
                     />
                   </div>
                 </div>
-              </div>
 
-              <div className="flex items-end">
-                <button
-                  type="button"
-                  onClick={addService}
-                  className="w-full sm:w-auto sm:mt-[21px] px-6 py-2.5 bg-brand-primary/10 text-brand-primary rounded-xl text-[11px] font-bold hover:bg-brand-primary hover:text-white transition-all flex items-center justify-center gap-2 group border border-brand-primary/20 shadow-sm"
-                >
-                  <Plus size={14} className="group-hover:rotate-90 transition-transform duration-300" />
-                  Add Service to Bill
-                </button>
+                <div className="w-full sm:w-[220px] space-y-1.5">
+                  <label className="text-[10px] font-bold text-brand-muted uppercase tracking-widest block ml-1">Discount Type & Value</label>
+                  <div className="flex gap-2">
+                    <div className="flex bg-slate-100 p-1 rounded-xl w-[90px]">
+                      <button
+                        type="button"
+                        onClick={() => setNewTreatment({ ...newTreatment, serviceDiscountType: 'percentage' })}
+                        className={`flex-1 flex items-center justify-center rounded-lg py-1.5 text-[10px] font-black transition-all ${
+                          newTreatment.serviceDiscountType === 'percentage' 
+                            ? 'bg-blue-600 text-white shadow-sm' 
+                            : 'text-slate-400 hover:text-slate-600'
+                        }`}
+                      >
+                        %
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setNewTreatment({ ...newTreatment, serviceDiscountType: 'fixed' })}
+                        className={`flex-1 flex items-center justify-center rounded-lg py-1.5 text-[10px] font-black transition-all ${
+                          newTreatment.serviceDiscountType === 'fixed' 
+                            ? 'bg-emerald-600 text-white shadow-sm' 
+                            : 'text-slate-400 hover:text-slate-600'
+                        }`}
+                      >
+                        INR
+                      </button>
+                    </div>
+                    <div className="flex-1 flex bg-white border border-brand-border rounded-xl overflow-hidden focus-within:border-brand-primary transition-all">
+                      <span className="pl-3 py-2 text-[10px] font-bold text-brand-muted flex items-center">{newTreatment.serviceDiscountType === 'percentage' ? '%' : '₹'}</span>
+                      <input
+                        type="number"
+                        placeholder="0"
+                        className="w-full px-2 py-2 text-base sm:text-sm outline-none font-mono"
+                        value={newTreatment.serviceDiscount || ''}
+                        onChange={(e) => setNewTreatment({ ...newTreatment, serviceDiscount: parseFloat(e.target.value) || 0 })}
+                      />
+                    </div>
+                  </div>
+                </div>
+
+                <div className="flex items-end">
+                  <button
+                    type="button"
+                    onClick={addService}
+                    className="w-full sm:w-auto sm:mt-[21px] px-6 py-2.5 bg-brand-primary/10 text-brand-primary rounded-xl text-[11px] font-bold hover:bg-brand-primary hover:text-white transition-all flex items-center justify-center gap-2 group border border-brand-primary/20 shadow-sm"
+                  >
+                    <Plus size={14} className="group-hover:rotate-90 transition-transform duration-300" />
+                    Add Service to Bill
+                  </button>
+                </div>
               </div>
-            </div>
+            )}
 
             {servicesList.length > 0 && (
               <div className="flex flex-wrap gap-2 mt-4 pt-4 border-t border-slate-50">
@@ -515,8 +551,9 @@ export default function ClientDetail({ userId, client, onBack, onUpdate }: Clien
           </div>
 
         {/* Product Inventory & Billing Selection */}
-        <div className="px-5 sm:px-8 pb-8 space-y-8 animate-in fade-in slide-in-from-top-4 duration-500">
-          <div className="pt-4 border-t border-slate-100">
+        {userRole === 'admin' ? (
+          <div className="px-5 sm:px-8 pb-8 space-y-8 animate-in fade-in slide-in-from-top-4 duration-500">
+            <div className="pt-4 border-t border-slate-100">
             <div className="flex items-center gap-2 mb-4">
               <div className="w-8 h-8 rounded-lg bg-emerald-50 text-emerald-600 flex items-center justify-center">
                 <ShoppingCart size={16} />
@@ -652,86 +689,135 @@ export default function ClientDetail({ userId, client, onBack, onUpdate }: Clien
                     <span className="text-xl font-black text-brand-secondary font-mono">₹{totalAmount.toFixed(2)}</span>
                   </div>
 
-                  <div className="space-y-2">
-                    <label className="text-[10px] font-bold text-brand-muted uppercase tracking-widest ml-1">Payment Method</label>
-                    <div className="grid grid-cols-2 gap-2">
-                      {['Cash', 'PhonePe', 'POS', 'POS QR Code'].map((method) => (
-                        <button
-                          key={method}
-                          type="button"
-                          onClick={() => setNewTreatment({ ...newTreatment, paymentMethod: method as any })}
-                          className={`flex items-center gap-2 px-3 py-2 rounded-xl text-[10px] font-bold transition-all border ${
-                            newTreatment.paymentMethod === method 
-                              ? 'bg-blue-50 text-brand-primary border-brand-primary shadow-sm ring-1 ring-brand-primary/10' 
-                              : 'bg-white text-brand-muted border-brand-border hover:border-blue-100/50'
-                          }`}
-                        >
-                          {method === 'Cash' && <Banknote size={12} />}
-                          {method.includes('POS') && <CreditCard size={12} />}
-                          {method === 'PhonePe' && <Smartphone size={12} />}
-                          {method}
-                        </button>
-                      ))}
+                  <div className="space-y-4">
+                    <div className="flex items-center justify-between">
+                      <label className="text-[10px] font-bold text-brand-muted uppercase tracking-widest ml-1">Payment Modes (Split)</label>
+                      <button 
+                        type="button" 
+                        onClick={() => setSplitPayments([...splitPayments, { method: 'Cash', amount: 0 }])}
+                        className="text-[9px] font-bold text-brand-primary bg-blue-50 px-2 py-0.5 rounded hover:bg-brand-primary hover:text-white transition-all border border-brand-primary/10"
+                      >
+                        Add Mode
+                      </button>
                     </div>
+
+                    {splitPayments.length > 0 ? (
+                      <div className="space-y-3 p-3 bg-slate-50/50 rounded-2xl border border-slate-100">
+                        {splitPayments.map((p, idx) => (
+                          <div key={idx} className="flex gap-2">
+                             <select
+                               className="bg-white border border-brand-border rounded-lg text-xs px-2 py-1.5 focus:border-brand-primary outline-none"
+                               value={p.method}
+                               onChange={(e) => {
+                                 const next = [...splitPayments];
+                                 next[idx].method = e.target.value as any;
+                                 setSplitPayments(next);
+                               }}
+                             >
+                               <option value="Cash">Cash</option>
+                               <option value="PhonePe">PhonePe</option>
+                               <option value="POS">POS</option>
+                               <option value="POS QR Code">POS QR Code</option>
+                             </select>
+                             <div className="flex-1 relative">
+                               <span className="absolute left-2.5 top-1/2 -translate-y-1/2 text-[10px] font-bold text-brand-muted">₹</span>
+                               <input 
+                                 type="number"
+                                 className="w-full pl-6 pr-3 py-1.5 bg-white border border-brand-border rounded-lg text-xs font-mono outline-none focus:border-brand-primary"
+                                 value={p.amount}
+                                 onChange={(e) => {
+                                   const next = [...splitPayments];
+                                   next[idx].amount = parseFloat(e.target.value) || 0;
+                                   setSplitPayments(next);
+                                 }}
+                               />
+                             </div>
+                             <button
+                               type="button"
+                               onClick={() => setSplitPayments(splitPayments.filter((_, i) => i !== idx))}
+                               className="p-1.5 text-brand-muted hover:text-red-500 transition-colors"
+                             >
+                               <X size={14} />
+                             </button>
+                          </div>
+                        ))}
+                      </div>
+                    ) : (
+                      <div className="grid grid-cols-2 gap-2">
+                        {['Cash', 'PhonePe', 'POS', 'POS QR Code'].map((method) => (
+                          <button
+                            key={method}
+                            type="button"
+                            onClick={() => setNewTreatment({ ...newTreatment, paymentMethod: method as any })}
+                            className={`flex items-center gap-2 px-3 py-2 rounded-xl text-[10px] font-bold transition-all border ${
+                              newTreatment.paymentMethod === method 
+                                ? 'bg-blue-50 text-brand-primary border-brand-primary shadow-sm ring-1 ring-brand-primary/10' 
+                                : 'bg-white text-brand-muted border-brand-border hover:border-blue-100/50'
+                            }`}
+                          >
+                            {method === 'Cash' && <Banknote size={12} />}
+                            {method.includes('POS') && <CreditCard size={12} />}
+                            {method === 'PhonePe' && <Smartphone size={12} />}
+                            {method}
+                          </button>
+                        ))}
+                      </div>
+                    )}
                   </div>
 
                   <div className="space-y-2">
-                    <label className="text-[10px] font-bold text-brand-muted uppercase tracking-widest ml-1">Amount Paid (₹)</label>
+                    <label className="text-[10px] font-bold text-brand-muted uppercase tracking-widest ml-1">
+                      {splitPayments.length > 0 ? "Total Paid (Calculated)" : "Amount Paid (₹)"}
+                    </label>
                     <input
+                      readOnly={splitPayments.length > 0}
                       type="number"
-                      className="w-full px-4 py-2.5 bg-slate-50 border border-brand-border rounded-xl text-lg font-black text-emerald-600 outline-none focus:ring-2 focus:ring-emerald-500/10 focus:border-emerald-500 transition-all font-mono"
-                      value={newTreatment.paidAmount}
-                      onChange={(e) => setNewTreatment({ ...newTreatment, paidAmount: parseFloat(e.target.value) || 0 })}
+                      className={`w-full px-4 py-2.5 border rounded-xl text-lg font-black text-emerald-600 outline-none transition-all font-mono ${
+                        splitPayments.length > 0 ? 'bg-slate-100 border-slate-200 opacity-80' : 'bg-slate-50 border-brand-border focus:ring-2 focus:ring-emerald-500/10 focus:border-emerald-500'
+                      }`}
+                      value={splitPayments.length > 0 ? splitPayments.reduce((acc, p) => acc + p.amount, 0) : newTreatment.paidAmount}
+                      onChange={(e) => !splitPayments.length && setNewTreatment({ ...newTreatment, paidAmount: parseFloat(e.target.value) || 0 })}
                     />
                   </div>
 
                   <div className="pt-4 flex justify-between items-center text-red-500 pb-4 border-b border-slate-50">
                     <span className="text-[10px] font-bold uppercase tracking-widest">Remaining Balance</span>
-                    <span className="text-sm font-black font-mono">₹{(totalAmount - newTreatment.paidAmount).toFixed(2)}</span>
+                    <span className="text-sm font-black font-mono">
+                      ₹{(totalAmount - (splitPayments.length > 0 ? splitPayments.reduce((acc, p) => acc + p.amount, 0) : newTreatment.paidAmount)).toFixed(2)}
+                    </span>
                   </div>
-
-                  <div className="pt-2 space-y-3">
-                    <button
-                      disabled={isLogging}
-                      type="submit"
-                      className={`w-full btn-professional py-3 flex items-center justify-center gap-3 shadow-lg transition-transform hover:scale-[1.02] active:scale-[0.98] ${
-                        editingTreatmentId ? 'bg-blue-600 text-white hover:bg-blue-700 shadow-blue-200' : 'btn-success shadow-emerald-200'
-                      }`}
-                    >
-                      <Save size={18} />
-                      <span className="font-bold text-sm tracking-wide">
-                        {isLogging ? 'Processing...' : editingTreatmentId ? 'Update Clinical Record' : 'Save Clinical Record'}
-                      </span>
-                    </button>
-                    
-                    {editingTreatmentId && (
-                      <button
-                        type="button"
-                        onClick={resetForm}
-                        className="w-full py-2.5 rounded-xl bg-slate-50 text-brand-muted text-[11px] font-bold hover:bg-slate-100 transition-colors border border-brand-border flex items-center justify-center gap-2"
-                      >
-                        <RotateCcw size={14} />
-                        Cancel Edit
-                      </button>
-                    )}
                   </div>
                 </div>
               </div>
             </div>
           </div>
-        </div>
-
-          <div className="px-5 sm:px-8 pb-8 space-y-1.5">
-            <label className="text-[10px] font-bold text-brand-muted uppercase tracking-widest block ml-1">Clinical Treatment Notes</label>
-            <textarea
-              placeholder="Enter comprehensive clinical observations, results, and recommendations..."
-              className="w-full px-4 py-3 bg-white border border-brand-border rounded-xl text-base sm:text-sm focus:ring-2 focus:ring-brand-primary/10 focus:border-brand-primary transition-all outline-none min-h-[100px] resize-none"
-              value={newTreatment.notes}
-              onChange={(e) => setNewTreatment({ ...newTreatment, notes: e.target.value })}
-            />
+        ) : (
+          <div className="px-5 sm:px-8 pb-8 pt-4">
+            <div className="bg-blue-50 border border-blue-100 p-6 rounded-2xl flex items-start gap-4">
+              <div className="w-10 h-10 bg-white rounded-xl shadow-sm border border-blue-100 flex items-center justify-center text-brand-primary shrink-0">
+                <AlertCircle size={20} />
+              </div>
+              <div className="space-y-1">
+                <p className="text-xs font-bold text-brand-secondary uppercase tracking-widest">Staff Clinical Mode Active</p>
+                <p className="text-xs text-brand-muted leading-relaxed">
+                  Financial fields are restricted. Your clinical log will be tagged for administrative billing finalization.
+                </p>
+                <div className="pt-4">
+                  <button
+                    disabled={isLogging}
+                    type="submit"
+                    className="px-8 py-3 bg-brand-primary text-white rounded-xl text-sm font-bold shadow-lg shadow-brand-primary/20 hover:scale-[1.02] active:scale-[0.98] transition-all flex items-center justify-center gap-2"
+                  >
+                    <Save size={18} />
+                    {isLogging ? 'Processing...' : 'Save Clinical Record'}
+                  </button>
+                </div>
+              </div>
+            </div>
           </div>
-        </form>
-      </div>
+        )}
+            </form>
+          </div>
 
       {/* History Table Card */}
       <div className="section-card">
@@ -745,7 +831,7 @@ export default function ClientDetail({ userId, client, onBack, onUpdate }: Clien
               <tr className="bg-slate-50/30">
                 <th className="px-5 sm:px-8 py-3 sm:py-4 text-[10px] font-bold text-brand-muted uppercase tracking-wider border-b border-brand-border">Date</th>
                 <th className="px-5 sm:px-8 py-3 sm:py-4 text-[10px] font-bold text-brand-muted uppercase tracking-wider border-b border-brand-border">Treatment & Products</th>
-                <th className="px-5 sm:px-8 py-3 sm:py-4 text-[10px] font-bold text-brand-muted uppercase tracking-wider border-b border-brand-border">Billing</th>
+                {userRole === 'admin' && <th className="px-5 sm:px-8 py-3 sm:py-4 text-[10px] font-bold text-brand-muted uppercase tracking-wider border-b border-brand-border">Billing</th>}
                 <th className="px-5 sm:px-8 py-3 sm:py-4 text-[10px] font-bold text-brand-muted uppercase tracking-wider border-b border-brand-border text-right">Doctor</th>
                 <th className="px-5 sm:px-8 py-3 sm:py-4 text-[10px] font-bold text-brand-muted uppercase tracking-wider border-b border-brand-border text-right">Follow-up</th>
                 <th className="px-5 sm:px-8 py-3 sm:py-4 text-[10px] font-bold text-brand-muted uppercase tracking-wider border-b border-brand-border text-right">Actions</th>
@@ -759,9 +845,16 @@ export default function ClientDetail({ userId, client, onBack, onUpdate }: Clien
                   </td>
                   <td className="px-5 sm:px-8 py-3 sm:py-4">
                     <div className="space-y-1">
-                      <span className="px-2.5 py-1 bg-blue-50 text-brand-primary text-[10px] sm:text-[11px] font-bold rounded-lg group-hover:bg-white transition-colors block w-fit">
-                        {t.treatmentName}
-                      </span>
+                      <div className="flex items-center gap-2">
+                        <span className="px-2.5 py-1 bg-blue-50 text-brand-primary text-[10px] sm:text-[11px] font-bold rounded-lg group-hover:bg-white transition-colors block w-fit">
+                          {t.treatmentName}
+                        </span>
+                        {userRole === 'admin' && t.paymentPending && (
+                          <span className="flex items-center gap-1 px-1.5 py-0.5 bg-orange-50 text-orange-600 text-[8px] font-black uppercase rounded border border-orange-100 animate-pulse">
+                            <AlertCircle size={8} /> Pending Pay
+                          </span>
+                        )}
+                      </div>
                       {t.products && t.products.length > 0 && (
                         <div className="flex flex-wrap gap-1">
                           {t.products.map((p, i) => (
@@ -771,22 +864,37 @@ export default function ClientDetail({ userId, client, onBack, onUpdate }: Clien
                       )}
                     </div>
                   </td>
-                  <td className="px-5 sm:px-8 py-3 sm:py-4">
-                    <div className="space-y-0.5">
-                      <div className="text-[11px] font-black text-brand-secondary font-mono">₹{(t.totalAmount || 0).toFixed(0)}</div>
-                      <div className="flex flex-col gap-0.5">
-                        <div className="flex items-center gap-1 text-[9px] font-bold text-emerald-600">
-                          <CheckCircle2 size={8} /> Paid: ₹{(t.paidAmount || 0).toFixed(0)}
-                        </div>
-                        {(t.balanceAmount || 0) > 0 && (
-                          <div className="flex items-center gap-1 text-[9px] font-bold text-red-500">
-                            <AlertCircle size={8} /> Bal: ₹{(t.balanceAmount || 0).toFixed(0)}
+                  {userRole === 'admin' && (
+                    <td className="px-5 sm:px-8 py-3 sm:py-4">
+                      <div className="space-y-0.5">
+                        <div className="text-[11px] font-black text-brand-secondary font-mono">₹{(t.totalAmount || 0).toFixed(0)}</div>
+                        <div className="flex flex-col gap-0.5">
+                          <div className="flex items-center gap-1 text-[9px] font-bold text-emerald-600">
+                            <CheckCircle2 size={8} /> Paid: ₹{(t.paidAmount || 0).toFixed(0)}
                           </div>
-                        )}
-                        <div className="text-[8px] font-bold text-brand-muted uppercase tracking-tighter bg-slate-50 w-fit px-1 rounded">{t.paymentMethod || 'Cash'}</div>
+                          {(t.balanceAmount || 0) > 0 && (
+                            <div className="flex items-center gap-1 text-[9px] font-bold text-red-500">
+                              <AlertCircle size={8} /> Bal: ₹{(t.balanceAmount || 0).toFixed(0)}
+                            </div>
+                          )}
+                          <div className="text-[8px] font-bold text-brand-muted uppercase tracking-tighter bg-slate-50 w-fit px-1 rounded">
+                            {t.splitPayments && t.splitPayments.length > 0 ? (
+                              <div className="flex flex-col gap-0.5">
+                                {t.splitPayments.map((p, pi) => (
+                                  <div key={pi} className="flex justify-between gap-2 min-w-[70px]">
+                                    <span>{p.method}:</span>
+                                    <span>₹{p.amount}</span>
+                                  </div>
+                                ))}
+                              </div>
+                            ) : (
+                              t.paymentMethod || 'Cash'
+                            )}
+                          </div>
+                        </div>
                       </div>
-                    </div>
-                  </td>
+                    </td>
+                  )}
                   <td className="px-5 sm:px-8 py-3 sm:py-4 text-right">
                     <div className="flex items-center justify-end gap-1.5">
                       <Stethoscope size={12} className="text-brand-muted" />

@@ -12,6 +12,7 @@ interface DashboardViewProps {
     monthSales: number;
     totalDues: number;
   };
+  userRole?: 'admin' | 'staff';
   recentTreatments: any[];
   dueTreatments: any[];
   upcomingFollowUps: any[];
@@ -30,6 +31,7 @@ interface DashboardViewProps {
 
 export default function DashboardView({ 
   stats, 
+  userRole = 'admin',
   recentTreatments, 
   dueTreatments,
   upcomingFollowUps,
@@ -103,44 +105,46 @@ export default function DashboardView({
       </div>
 
       {/* Sales Metrics Grid */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 sm:gap-6">
-        <button 
-          onClick={onViewTreatmentsToday}
-          className="bg-white p-5 sm:p-6 rounded-2xl border border-brand-border shadow-sm group hover:border-emerald-500/30 transition-all text-left outline-none"
-        >
-          <div className="flex justify-between items-start mb-4">
-            <div className="w-10 h-10 bg-emerald-50 rounded-xl flex items-center justify-center text-emerald-600">
-              <IndianRupee size={20} />
+      {userRole === 'admin' && (
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 sm:gap-6 mt-6 sm:mt-8">
+          <button 
+            onClick={onViewTreatmentsToday}
+            className="bg-white p-5 sm:p-6 rounded-2xl border border-brand-border shadow-sm group hover:border-emerald-500/30 transition-all text-left outline-none"
+          >
+            <div className="flex justify-between items-start mb-4">
+              <div className="w-10 h-10 bg-emerald-50 rounded-xl flex items-center justify-center text-emerald-600">
+                <IndianRupee size={20} />
+              </div>
+              <span className="text-[10px] font-bold text-blue-600 bg-blue-50 px-2 py-0.5 rounded-full uppercase tracking-wider text-center">Gross Sales Today</span>
             </div>
-            <span className="text-[10px] font-bold text-blue-600 bg-blue-50 px-2 py-0.5 rounded-full uppercase tracking-wider text-center">Gross Sales Today</span>
-          </div>
-          <div className="text-3xl font-black text-brand-secondary mb-1 font-mono group-hover:text-emerald-600 transition-colors">₹{(stats.todaySales || 0).toLocaleString()}</div>
-          <div className="text-xs font-semibold text-brand-muted uppercase tracking-wider">Total (Received + Due) Today</div>
-        </button>
+            <div className="text-3xl font-black text-brand-secondary mb-1 font-mono group-hover:text-emerald-600 transition-colors">₹{(stats.todaySales || 0).toLocaleString()}</div>
+            <div className="text-xs font-semibold text-brand-muted uppercase tracking-wider">Total (Received + Due) Today</div>
+          </button>
 
-        <button 
-          onClick={onViewMonthSales}
-          className="bg-white p-5 sm:p-6 rounded-2xl border border-brand-border shadow-sm group hover:border-brand-primary/30 transition-all text-left overflow-hidden relative outline-none"
-        >
-          <div className="absolute top-0 right-0 w-32 h-32 bg-brand-primary/5 rounded-full -mr-16 -mt-16 pointer-events-none" />
-          <div className="flex justify-between items-start mb-4">
-            <div className="w-10 h-10 bg-blue-50 rounded-xl flex items-center justify-center text-brand-primary">
-              <TrendingUp size={20} />
-            </div>
-            <div className="flex flex-col items-end">
-              <div className="flex items-center gap-1 text-[10px] font-bold text-brand-primary bg-blue-50 px-2 py-0.5 rounded-full uppercase tracking-wider">
-                <Wallet size={10} />
-                Monthly Sales
+          <button 
+            onClick={onViewMonthSales}
+            className="bg-white p-5 sm:p-6 rounded-2xl border border-brand-border shadow-sm group hover:border-brand-primary/30 transition-all text-left overflow-hidden relative outline-none"
+          >
+            <div className="absolute top-0 right-0 w-32 h-32 bg-brand-primary/5 rounded-full -mr-16 -mt-16 pointer-events-none" />
+            <div className="flex justify-between items-start mb-4">
+              <div className="w-10 h-10 bg-blue-50 rounded-xl flex items-center justify-center text-brand-primary">
+                <TrendingUp size={20} />
               </div>
-              <div className="mt-1 text-[10px] font-bold text-red-500 bg-red-50 px-2 py-0.5 rounded-full uppercase tracking-wider">
-                Outstanding: ₹{(stats.totalDues || 0).toLocaleString()}
+              <div className="flex flex-col items-end">
+                <div className="flex items-center gap-1 text-[10px] font-bold text-brand-primary bg-blue-50 px-2 py-0.5 rounded-full uppercase tracking-wider">
+                  <Wallet size={10} />
+                  Monthly Sales
+                </div>
+                <div className="mt-1 text-[10px] font-bold text-red-500 bg-red-50 px-2 py-0.5 rounded-full uppercase tracking-wider">
+                  Outstanding: ₹{(stats.totalDues || 0).toLocaleString()}
+                </div>
               </div>
             </div>
-          </div>
-          <div className="text-3xl font-black text-brand-secondary mb-1 font-mono group-hover:text-brand-primary transition-colors">₹{(stats.monthSales || 0).toLocaleString()}</div>
-          <div className="text-xs font-semibold text-brand-muted uppercase tracking-wider text-wrap">Expected Revenue ({format(new Date(), 'MMMM')})</div>
-        </button>
-      </div>
+            <div className="text-3xl font-black text-brand-secondary mb-1 font-mono group-hover:text-brand-primary transition-colors">₹{(stats.monthSales || 0).toLocaleString()}</div>
+            <div className="text-xs font-semibold text-brand-muted uppercase tracking-wider text-wrap">Expected Revenue ({format(new Date(), 'MMMM')})</div>
+          </button>
+        </div>
+      )}
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 sm:gap-8">
         {/* Recent Activity Timeline */}

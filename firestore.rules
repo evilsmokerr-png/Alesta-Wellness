@@ -62,6 +62,7 @@ service cloud.firestore {
             && (!('productUsage' in data) || data.productUsage is string)
             && (!('products' in data) || data.products is list)
             && (!('services' in data) || data.services is list)
+            && (!('splitPayments' in data) || data.splitPayments is list)
             && (!('paymentMethod' in data) || data.paymentMethod in ['Cash', 'PhonePe', 'POS', 'POS QR Code']);
         }
 

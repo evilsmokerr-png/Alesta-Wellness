@@ -19,6 +19,7 @@ type ViewType = 'dashboard' | 'clients' | 'notifications' | 'leads' | 'sales-his
 
 export default function App() {
   const [user, setUser] = useState<User | null>(null);
+  const [userRole, setUserRole] = useState<'admin' | 'staff'>('admin');
   const [selectedClient, setSelectedClient] = useState<Client | null>(null);
   const [isFormOpen, setIsFormOpen] = useState(false);
   const [view, setView] = useState<ViewType>('dashboard');
@@ -217,7 +218,8 @@ export default function App() {
       collectionGroup(db, 'treatments'),
       where('ownerId', '==', user.uid),
       where('date', '>=', monthStart),
-      where('date', '<=', monthEnd)
+      where('date', '<=', monthEnd),
+      orderBy('date', 'desc')
     );
 
     const unsubMonthSales = onSnapshot(monthSalesQuery, (snapshot) => {
@@ -526,17 +528,17 @@ export default function App() {
       {/* Main Content Area */}
       <main className="lg:pl-64 flex-1 min-h-screen flex flex-col pb-20 lg:pb-0">
         {/* Header */}
-        <header className="sticky top-0 z-30 bg-white border-b border-brand-border px-4 sm:px-8 py-4 flex items-center justify-between shadow-sm shadow-slate-200/20">
-          <div className="flex items-center gap-3 lg:hidden overflow-hidden">
+        <header className="sticky top-0 z-30 bg-white border-b border-brand-border px-3 sm:px-8 py-4 flex items-center justify-between shadow-sm shadow-slate-200/20">
+          <div className="flex items-center gap-2 sm:gap-3 lg:hidden max-w-[45%] overflow-hidden">
              <div className="w-8 h-8 bg-brand-primary rounded-lg flex-shrink-0 flex items-center justify-center text-white shadow-md shadow-brand-primary/20">
               <Leaf size={18} />
             </div>
-            <h1 className="font-bold text-brand-secondary tracking-tight truncate">Alesta Wellness</h1>
+            <h1 className="font-bold text-brand-secondary tracking-tight truncate text-sm sm:text-base">Alesta Wellness</h1>
           </div>
           
           <div className="hidden lg:block">
             <h1 className="text-lg font-bold text-brand-secondary tracking-tight">
-              {view === 'dashboard' && !selectedClient && "Clinical Overview"}
+              {view === 'dashboard' && !selectedClient && (userRole === 'staff' ? "Clinical Suite (Staff Mode)" : "Clinical Overview")}
               {view === 'clients' && !selectedClient && "Patient Records"}
               {view === 'leads' && !selectedClient && "Manage Inquiries"}
               {view === 'notifications' && !selectedClient && "Daily Follow-ups"}
@@ -544,7 +546,9 @@ export default function App() {
             </h1>
           </div>
 
-          <Auth onAuthChange={setUser} />
+          <div className="flex-shrink-0">
+            <Auth onAuthChange={setUser} onRoleChange={setUserRole} />
+          </div>
         </header>
 
         {/* Dynamic Content Pane */}
@@ -592,6 +596,7 @@ export default function App() {
                 >
                   <ClientDetail 
                     userId={user.uid}
+                    userRole={userRole}
                     client={selectedClient} 
                     onBack={() => setSelectedClient(null)} 
                     onUpdate={setSelectedClient}
@@ -1237,6 +1242,7 @@ export default function App() {
                       ...stats,
                       followUpsDue: stats.followUpsDue + stats.leadsDue
                     }}
+                    userRole={userRole}
                     recentTreatments={recentTreatments}
                     dueTreatments={dueTreatmentsList}
                     upcomingFollowUps={upcomingFollowUpsList}

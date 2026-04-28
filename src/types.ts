@@ -41,6 +41,11 @@ export interface ServiceEntry {
   productUsage?: string;
 }
 
+export interface SplitPayment {
+  method: 'Cash' | 'PhonePe' | 'POS' | 'POS QR Code';
+  amount: number;
+}
+
 export interface Treatment {
   id?: string;
   date: any;
@@ -59,6 +64,9 @@ export interface Treatment {
   paidAmount?: number;
   balanceAmount?: number;
   paymentMethod?: 'Cash' | 'PhonePe' | 'POS' | 'POS QR Code';
+  splitPayments?: SplitPayment[];
+  paymentPending?: boolean;
+  addedByRole?: 'admin' | 'staff';
   createdAt: any;
   updatedAt?: any;
 }
