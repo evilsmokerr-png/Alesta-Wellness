@@ -21,6 +21,9 @@ export interface Lead {
   status: 'enquiry' | 'appointment_set' | 'visited' | 'no_show' | 'cancelled';
   notes?: string;
   ownerId: string;
+  type?: 'new' | 'existing';
+  doctorName?: string;
+  upcomingTreatment?: string;
   createdAt: any;
   updatedAt: any;
 }

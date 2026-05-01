@@ -491,7 +491,7 @@ export default function ClientDetail({
               <form onSubmit={handleLogTreatment} className="space-y-0">
                 <div className="p-5 sm:p-8 space-y-6">
                   {/* ... form content continues below ... */}
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6 items-start">
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-6 items-start">
               <div className="sm:col-span-1 lg:col-span-1 space-y-1.5 relative">
                 <label className="text-[10px] font-bold text-brand-muted uppercase tracking-widest block ml-1">Treatment Name</label>
                 <input
@@ -596,6 +596,26 @@ export default function ClientDetail({
                   </motion.div>
                 )}
               </AnimatePresence>
+            </div>
+
+            <div className="space-y-1.5">
+              <label className="text-[10px] font-bold text-brand-muted uppercase tracking-widest block ml-1">Treatment Date</label>
+              <input
+                type="date"
+                className="w-full px-4 py-2.5 bg-white border border-brand-border rounded-xl text-base sm:text-sm focus:ring-2 focus:ring-brand-primary/10 focus:border-brand-primary transition-all outline-none font-bold text-brand-secondary"
+                value={newTreatment.date}
+                onChange={(e) => {
+                  const newDate = e.target.value;
+                  let followUpDate = newTreatment.followUpDate;
+                  if (newTreatment.followUpDays) {
+                    const daysNum = parseInt(newTreatment.followUpDays);
+                    if (!isNaN(daysNum)) {
+                      followUpDate = format(addDays(parseISO(newDate), daysNum), 'yyyy-MM-dd');
+                    }
+                  }
+                  setNewTreatment({ ...newTreatment, date: newDate, followUpDate });
+                }}
+              />
             </div>
 
             <div className="space-y-1.5">

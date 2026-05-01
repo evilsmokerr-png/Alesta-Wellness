@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { db } from '../lib/firebase';
 import { collection, query, where, getDocs, collectionGroup, orderBy, limit } from 'firebase/firestore';
 import { format, addDays, isSameDay, startOfDay } from 'date-fns';
-import { MessageCircle, Bell, User, Calendar, History, ArrowRight } from 'lucide-react';
+import { MessageCircle, Bell, User, Calendar, History, ArrowRight, CheckCircle2 } from 'lucide-react';
 import { motion } from 'motion/react';
 import { Lead, Treatment } from '../types';
 
@@ -146,6 +146,24 @@ export default function ReminderPanel({ userId }: ReminderPanelProps) {
     window.open(`https://wa.me/${phone.startsWith('91') ? phone : '91' + phone}?text=${encodedMsg}`, '_blank');
   };
 
+  const sendSummaryToStaff = () => {
+    if (reminders.length === 0) return;
+
+    let summary = `*Staff Reminder - Follow-ups Due Today*\n\nPlease call/update these patients:\n\n`;
+    
+    reminders.forEach((r, i) => {
+      const typeLabel = r.type === 'lead' ? 'Inquiry' : 'Treatment';
+      const context = r.type === 'lead' ? (r.data.concern || 'General') : r.data.treatmentName;
+      summary += `${i+1}. *${r.name}* (${r.phone})\n   - Type: ${typeLabel}\n   - Context: ${context}\n   - Due: ${format(r.dueDate, 'dd MMM')}\n\n`;
+    });
+
+    summary += `_Please update clinical outcomes after calling._`;
+
+    const encodedMsg = encodeURIComponent(summary);
+    // Open WA without number so admin can pick the staff/group contact
+    window.open(`https://wa.me/?text=${encodedMsg}`, '_blank');
+  };
+
   if (loading) return (
     <div className="flex items-center justify-center p-12">
       <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-brand-primary"></div>
@@ -159,9 +177,20 @@ export default function ReminderPanel({ userId }: ReminderPanelProps) {
           <h3 className="text-lg font-bold text-brand-secondary">Follow-up Reminders Due Today</h3>
           <p className="text-xs text-brand-muted mt-1">Identified based on 1-day and 3-day advance windows</p>
         </div>
-        <div className="flex items-center gap-2 px-3 py-1 bg-blue-50 text-brand-primary rounded-lg">
-          <Bell size={14} />
-          <span className="text-[10px] font-black uppercase tracking-widest">{reminders.length} Due</span>
+        <div className="flex flex-col sm:flex-row items-end sm:items-center gap-3">
+          {reminders.length > 0 && (
+            <button 
+              onClick={sendSummaryToStaff}
+              className="px-4 py-2 bg-brand-primary text-white rounded-xl text-xs font-bold hover:bg-brand-primary/90 transition-all flex items-center gap-2 shadow-lg shadow-brand-primary/20"
+            >
+              <MessageCircle size={14} />
+              Send Staff Summary
+            </button>
+          )}
+          <div className="flex items-center gap-2 px-3 py-1 bg-blue-50 text-brand-primary rounded-lg whitespace-nowrap">
+            <Bell size={14} />
+            <span className="text-[10px] font-black uppercase tracking-widest">{reminders.length} Due</span>
+          </div>
         </div>
       </div>
 
@@ -233,5 +262,3 @@ export default function ReminderPanel({ userId }: ReminderPanelProps) {
     </div>
   );
 }
-
-import { CheckCircle2 } from 'lucide-react';

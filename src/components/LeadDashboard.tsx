@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { db } from '../lib/firebase';
 import { collection, query, where, onSnapshot, orderBy, limit, doc, deleteDoc, serverTimestamp, updateDoc } from 'firebase/firestore';
-import { Search, UserPlus, Phone, Calendar, ClipboardList, Plus, ChevronRight, RefreshCw, Trash2, Clock, AlertTriangle, CheckCircle2, Tag, MessageSquare, Pencil, MessageCircle } from 'lucide-react';
+import { Search, UserPlus, Users, Phone, Calendar, ClipboardList, Plus, ChevronRight, RefreshCw, Trash2, Clock, AlertTriangle, CheckCircle2, Tag, MessageSquare, Pencil, MessageCircle, Stethoscope } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { format, isToday, isPast, isFuture } from 'date-fns';
 import { Lead } from '../types';
@@ -20,6 +20,7 @@ export default function LeadDashboard({ userId, onMarkVisited, onRequestDeleteLe
   const [isFormOpen, setIsFormOpen] = useState(false);
   const [selectedLead, setSelectedLead] = useState<Lead | undefined>();
   const [filter, setFilter] = useState<'all' | 'today' | 'no_show' | 'pending' | 'visited'>('all');
+  const [activeTab, setActiveTab] = useState<'new' | 'existing'>('new');
   const [confirmingDeleteId, setConfirmingDeleteId] = useState<string | null>(null);
 
   useEffect(() => {
@@ -30,7 +31,7 @@ export default function LeadDashboard({ userId, onMarkVisited, onRequestDeleteLe
       leadsRef,
       where('ownerId', '==', userId),
       orderBy('appointmentDate', 'asc'),
-      limit(100)
+      limit(200)
     );
 
     const unsubscribe = onSnapshot(q, (snapshot) => {
@@ -45,6 +46,9 @@ export default function LeadDashboard({ userId, onMarkVisited, onRequestDeleteLe
   }, [userId]);
 
   const filteredLeads = leads.filter(lead => {
+    const isCorrectType = activeTab === 'existing' ? lead.type === 'existing' : (lead.type === 'new' || !lead.type);
+    if (!isCorrectType) return false;
+
     const matchesSearch = lead.name.toLowerCase().includes(searchTerm.toLowerCase()) || 
                          lead.phone.includes(searchTerm);
     
@@ -57,20 +61,18 @@ export default function LeadDashboard({ userId, onMarkVisited, onRequestDeleteLe
     if (filter === 'pending') return lead.status === 'enquiry' || lead.status === 'appointment_set';
     if (filter === 'visited') return lead.status === 'visited';
     
-    // By default for 'all', we might want to exclude visited/no-shows if user wants a clean board, 
-    // but usually 'all' means all. Let's keep it as all for now.
     return true;
   });
 
   const getStatusBadge = (status: string, apptDate: Date) => {
     if (status === 'no_show') return <span className="bg-red-50 text-red-600 px-2 py-0.5 rounded-full text-[10px] font-bold">NO SHOW</span>;
-    if (status === 'visited') return <span className="bg-emerald-50 text-emerald-600 px-2 py-0.5 rounded-full text-[10px] font-bold">VISITED</span>;
-    if (status === 'cancelled') return <span className="bg-slate-50 text-slate-500 px-2 py-0.5 rounded-full text-[10px] font-bold">CANCELLED</span>;
+    if (status === 'visited') return <span className="bg-emerald-50 text-emerald-600 px-2 py-0.5 rounded-full text-[10px] font-bold">COMPLETED</span>;
+    if (status === 'cancelled') return <span className="bg-slate-50 text-slate-500 px-2 py-0.5 rounded-full text-[10px] font-bold">DECLINED</span>;
     
-    if (isToday(apptDate)) return <span className="bg-blue-50 text-brand-primary px-2 py-0.5 rounded-full text-[10px] font-bold">TODAY</span>;
-    if (isPast(apptDate)) return <span className="bg-orange-50 text-orange-600 px-2 py-0.5 rounded-full text-[10px] font-bold">OVERDUE</span>;
+    if (isToday(apptDate)) return <span className="bg-blue-600 text-white px-2 py-0.5 rounded-full text-[10px] font-bold shadow-sm">DUE TODAY</span>;
+    if (isPast(apptDate)) return <span className="bg-orange-50 text-orange-600 px-2 py-0.5 rounded-full text-[10px] font-bold">DELAYED</span>;
     
-    return <span className="bg-slate-50 text-brand-muted px-2 py-0.5 rounded-full text-[10px] font-bold uppercase">{status.replace('_', ' ')}</span>;
+    return <span className="bg-slate-100 text-brand-muted px-2 py-0.5 rounded-full text-[10px] font-bold uppercase">{status.replace('_', ' ')}</span>;
   };
 
   const handleDelete = (id: string) => {
@@ -84,31 +86,53 @@ export default function LeadDashboard({ userId, onMarkVisited, onRequestDeleteLe
     onMarkVisited(id);
   };
 
+  const currentTabLeads = leads.filter(l => activeTab === 'existing' ? l.type === 'existing' : (l.type === 'new' || !l.type));
+  
   const counts = {
-    all: leads.length,
-    today: leads.filter(l => {
+    all: currentTabLeads.length,
+    today: currentTabLeads.filter(l => {
       const d = l.appointmentDate?.toDate ? l.appointmentDate.toDate() : new Date(l.appointmentDate);
       return isToday(d);
     }).length,
-    pending: leads.filter(l => l.status === 'enquiry' || l.status === 'appointment_set').length,
-    visited: leads.filter(l => l.status === 'visited').length,
-    no_show: leads.filter(l => l.status === 'no_show' || (isPast(l.appointmentDate?.toDate ? l.appointmentDate.toDate() : new Date(l.appointmentDate)) && !isToday(l.appointmentDate?.toDate ? l.appointmentDate.toDate() : new Date(l.appointmentDate)) && l.status === 'appointment_set')).length,
+    pending: currentTabLeads.filter(l => l.status === 'enquiry' || l.status === 'appointment_set').length,
+    visited: currentTabLeads.filter(l => l.status === 'visited').length,
+    no_show: currentTabLeads.filter(l => l.status === 'no_show' || (isPast(l.appointmentDate?.toDate ? l.appointmentDate.toDate() : new Date(l.appointmentDate)) && !isToday(l.appointmentDate?.toDate ? l.appointmentDate.toDate() : new Date(l.appointmentDate)) && l.status === 'appointment_set')).length,
   };
 
   return (
     <div className="space-y-6 max-w-7xl mx-auto px-4 pb-12">
       {/* Header */}
-      <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
+      <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 bg-white/50 p-4 rounded-3xl border border-brand-border/30">
         <div>
-          <h2 className="text-xl sm:text-2xl font-bold text-brand-secondary tracking-tight">Inquiry & Appointments</h2>
-          <p className="text-brand-muted text-xs sm:text-sm mt-1">Manage new client calls and bookings</p>
+          <h2 className="text-xl sm:text-2xl font-black text-brand-secondary tracking-tight uppercase tracking-tighter">Calling & Outreach</h2>
+          <p className="text-brand-muted text-xs sm:text-sm font-medium mt-0.5 italic">Manage inquiries and patient engagement records</p>
         </div>
         <button 
           onClick={() => { setSelectedLead(undefined); setIsFormOpen(true); }}
-          className="w-full sm:w-auto flex items-center justify-center gap-2 px-6 py-3 bg-[#2ecc71] text-white rounded-xl text-sm font-bold hover:bg-[#27ae60] transition-all shadow-lg shadow-emerald-500/20"
+          className="w-full sm:w-auto flex items-center justify-center gap-2 px-6 py-3 bg-[#2ecc71] text-white rounded-xl text-sm font-black hover:bg-[#27ae60] transition-all shadow-lg shadow-emerald-500/20 uppercase tracking-widest"
         >
           <Plus size={18} />
-          Log New Inquiry
+          New Call Entry
+        </button>
+      </div>
+
+      {/* Mode Switcher */}
+      <div className="flex bg-white p-1 rounded-2xl border border-brand-border shadow-sm max-w-sm">
+        <button 
+          onClick={() => setActiveTab('new')}
+          className={`flex-1 flex items-center justify-center gap-2 py-2.5 rounded-xl text-[11px] font-black uppercase tracking-widest transition-all ${activeTab === 'new' ? 'bg-brand-primary text-white shadow-md' : 'text-brand-muted hover:bg-slate-50'}`}
+        >
+          <UserPlus size={14} />
+          New Inquiries
+          <span className="ml-1 opacity-60">({leads.filter(l => !l.type || l.type === 'new').length})</span>
+        </button>
+        <button 
+          onClick={() => setActiveTab('existing')}
+          className={`flex-1 flex items-center justify-center gap-2 py-2.5 rounded-xl text-[11px] font-black uppercase tracking-widest transition-all ${activeTab === 'existing' ? 'bg-brand-primary text-white shadow-md' : 'text-brand-muted hover:bg-slate-50'}`}
+        >
+          <Users size={14} />
+          Patient Outreach
+          <span className="ml-1 opacity-60">({leads.filter(l => l.type === 'existing').length})</span>
         </button>
       </div>
 
@@ -203,6 +227,16 @@ export default function LeadDashboard({ userId, onMarkVisited, onRequestDeleteLe
                         {lead.concern && (
                           <span className="flex items-center gap-1 text-[10px] bg-blue-50 text-brand-primary px-2 py-0.5 rounded-full font-bold uppercase tracking-wider">
                             <MessageSquare size={10} /> {lead.concern}
+                          </span>
+                        )}
+                        {lead.doctorName && (
+                          <span className="flex items-center gap-1 text-[10px] bg-purple-50 text-purple-600 px-2 py-0.5 rounded-full font-bold uppercase tracking-wider border border-purple-100">
+                            <Users size={10} /> {lead.doctorName}
+                          </span>
+                        )}
+                        {lead.upcomingTreatment && (
+                          <span className="flex items-center gap-1 text-[10px] bg-amber-50 text-amber-600 px-2 py-0.5 rounded-full font-bold uppercase tracking-wider border border-amber-100">
+                            <Stethoscope size={10} /> {lead.upcomingTreatment}
                           </span>
                         )}
                       </div>
