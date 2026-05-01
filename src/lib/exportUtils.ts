@@ -49,7 +49,7 @@ export const prepareTreatmentDataForExport = (treatments: any[], clientDataMap: 
       'Patient Name': t.clientName || client.name || 'Unknown',
       'Phone': t.clientPhone || client.phone || 'N/A',
       'Clinical Record': t.treatmentName || 'N/A',
-      'Intensity/Parameters': t.productUsage || 'N/A',
+      'Intensity / Level': t.productUsage || 'N/A',
       'Follow-up Date': followUpStr,
       'Doctor/Consultant': t.doctorName || 'N/A',
       'Service Charges': t.serviceCharges || 0,

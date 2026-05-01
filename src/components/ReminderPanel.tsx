@@ -5,6 +5,7 @@ import { format, addDays, isSameDay, startOfDay } from 'date-fns';
 import { MessageCircle, Bell, User, Calendar, History, ArrowRight, CheckCircle2 } from 'lucide-react';
 import { motion } from 'motion/react';
 import { Lead, Treatment } from '../types';
+import { safeToDate } from '../lib/dateUtils';
 
 interface ReminderPanelProps {
   userId: string;
@@ -47,7 +48,7 @@ export default function ReminderPanel({ userId }: ReminderPanelProps) {
         leadsSnap.docs.forEach(doc => {
           const lead = { id: doc.id, ...doc.data() } as Lead;
           if (lead.appointmentDate) {
-            const dueDate = lead.appointmentDate.toDate();
+            const dueDate = safeToDate(lead.appointmentDate);
             const startDue = startOfDay(dueDate);
             
             if (isSameDay(startDue, target1)) {
@@ -85,7 +86,7 @@ export default function ReminderPanel({ userId }: ReminderPanelProps) {
         treatmentsSnap.docs.forEach(doc => {
           const t = { id: doc.id, ...doc.data() } as Treatment;
           if (t.followUpDate) {
-            const dueDate = t.followUpDate.toDate();
+            const dueDate = safeToDate(t.followUpDate);
             const startDue = startOfDay(dueDate);
 
             if (isSameDay(startDue, target1)) {

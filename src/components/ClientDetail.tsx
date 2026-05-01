@@ -19,6 +19,13 @@ interface ClientDetailProps {
   onRequestDeleteTreatment?: (clientId: string, treatmentId: string) => void;
 }
 
+const safeToDate = (date: any): Date => {
+  if (!date) return new Date();
+  if (date instanceof Date) return date;
+  if (typeof date.toDate === 'function') return date.toDate();
+  return new Date(date);
+};
+
 export default function ClientDetail({ 
   userId, 
   userRole = 'admin', 
@@ -131,19 +138,43 @@ export default function ClientDetail({
   const handleEditTreatment = (t: Treatment) => {
     setEditingTreatmentId(t.id || null);
     const loadedServices = t.services || [];
-    setServicesList(loadedServices);
     setProductList(t.products || []);
     setSplitPayments(t.splitPayments || []);
     
-    // Fix for double billing: If services list exists, don't populate the specific service fields
-    // to avoid adding them twice in calculateTotal
-    const fDate = t.followUpDate ? (t.followUpDate instanceof Date ? t.followUpDate : t.followUpDate.toDate()) : null;
-    const tDate = t.date instanceof Date ? t.date : t.date.toDate();
+    const fDate = t.followUpDate ? safeToDate(t.followUpDate) : null;
+    const tDate = safeToDate(t.date);
     const days = fDate ? differenceInDays(fDate, tDate).toString() : '';
 
+    // If it's a single service, pull it into the primary form state for easier editing
+    let initialName = t.treatmentName;
+    let initialUsage = t.productUsage || '';
+    let initialMRP = t.serviceMRP || 0;
+    let initialDisc = t.serviceDiscount || 0;
+    let initialDiscType = t.serviceDiscountType || 'percentage';
+    let remainingServices = loadedServices;
+
+    if (loadedServices.length === 1) {
+      const s = loadedServices[0];
+      initialName = s.name;
+      initialUsage = s.productUsage || '';
+      initialMRP = s.mrp !== undefined ? s.mrp : (t.serviceMRP || 0);
+      initialDisc = s.discount !== undefined ? s.discount : (t.serviceDiscount || 0);
+      initialDiscType = s.discountType || (t.serviceDiscountType || 'percentage');
+      remainingServices = []; // Move it to the main inputs
+    } else if (loadedServices.length > 1) {
+      // Multi-service case: keep chips, keep main input empty for adding more
+      initialName = '';
+      initialUsage = '';
+      initialMRP = 0;
+      initialDisc = 0;
+      initialDiscType = 'percentage';
+    }
+
+    setServicesList(remainingServices);
+
     setNewTreatment({
-      treatmentName: loadedServices.length > 0 ? '' : t.treatmentName,
-      productUsage: loadedServices.length > 0 ? '' : (t.productUsage || ''),
+      treatmentName: initialName,
+      productUsage: initialUsage,
       doctorName: t.doctorName || '',
       date: format(tDate, 'yyyy-MM-dd'),
       followUpDate: fDate ? format(fDate, 'yyyy-MM-dd') : '',
@@ -151,9 +182,9 @@ export default function ClientDetail({
       notes: t.notes || '',
       paidAmount: t.paidAmount || 0,
       paymentMethod: t.paymentMethod || 'Cash',
-      serviceMRP: loadedServices.length > 0 ? 0 : (t.serviceMRP || 0),
-      serviceDiscount: loadedServices.length > 0 ? 0 : (t.serviceDiscount || 0),
-      serviceDiscountType: loadedServices.length > 0 ? 'percentage' : (t.serviceDiscountType || 'percentage'),
+      serviceMRP: initialMRP,
+      serviceDiscount: initialDisc,
+      serviceDiscountType: initialDiscType,
     });
     
     setIsAddingTreatment(true);
@@ -467,7 +498,7 @@ export default function ClientDetail({
               <div className="space-y-1">
                 <label className="text-[10px] font-bold text-brand-muted uppercase tracking-wider block">Member Since</label>
                 <span className="text-xs sm:text-sm font-medium text-brand-secondary block">
-                  {client.createdAt?.toDate ? format(client.createdAt.toDate(), 'MMM d, yyyy') : 'Recent'}
+                  {client.createdAt ? format(safeToDate(client.createdAt), 'MMM d, yyyy') : 'Recent'}
                 </span>
               </div>
             </div>
@@ -1048,7 +1079,8 @@ export default function ClientDetail({
             <thead>
               <tr className="bg-slate-50/30">
                 <th className="px-5 sm:px-8 py-3 sm:py-4 text-[10px] font-bold text-brand-muted uppercase tracking-wider border-b border-brand-border">Date</th>
-                <th className="px-5 sm:px-8 py-3 sm:py-4 text-[10px] font-bold text-brand-muted uppercase tracking-wider border-b border-brand-border">Treatment & Products</th>
+                <th className="px-5 sm:px-8 py-3 sm:py-4 text-[10px] font-bold text-brand-muted uppercase tracking-wider border-b border-brand-border">Treatment</th>
+                <th className="px-5 sm:px-8 py-3 sm:py-4 text-[10px] font-bold text-brand-muted uppercase tracking-wider border-b border-brand-border">Intensity / Products</th>
                 {userRole === 'admin' && <th className="px-5 sm:px-8 py-3 sm:py-4 text-[10px] font-bold text-brand-muted uppercase tracking-wider border-b border-brand-border">Billing</th>}
                 <th className="px-5 sm:px-8 py-3 sm:py-4 text-[10px] font-bold text-brand-muted uppercase tracking-wider border-b border-brand-border text-right">Doctor</th>
                 <th className="px-5 sm:px-8 py-3 sm:py-4 text-[10px] font-bold text-brand-muted uppercase tracking-wider border-b border-brand-border text-right">Follow-up</th>
@@ -1059,23 +1091,25 @@ export default function ClientDetail({
               {treatments.map((t) => (
                 <tr key={t.id} className="hover:bg-brand-row-hover transition-colors group">
                   <td className="px-5 sm:px-8 py-3 sm:py-4 mono text-[11px] sm:text-xs text-brand-muted">
-                    {format(t.date instanceof Date ? t.date : t.date.toDate(), 'dd-MMM-yyyy')}
+                    {format(safeToDate(t.date), 'dd-MMM-yyyy')}
+                  </td>
+                  <td className="px-5 sm:px-8 py-3 sm:py-4">
+                    <div className="flex flex-col gap-1">
+                      <span className="px-2.5 py-1 bg-blue-50 text-brand-primary text-[10px] sm:text-[11px] font-bold rounded-lg group-hover:bg-white transition-colors block w-fit">
+                        {t.treatmentName}
+                      </span>
+                      {userRole === 'admin' && t.paymentPending && (
+                        <span className="flex items-center gap-1 px-1.5 py-0.5 bg-orange-50 text-orange-600 text-[8px] font-black uppercase rounded border border-orange-100 animate-pulse w-fit">
+                          <AlertCircle size={8} /> Pending Pay
+                        </span>
+                      )}
+                    </div>
                   </td>
                   <td className="px-5 sm:px-8 py-3 sm:py-4">
                     <div className="space-y-1">
-                      <div className="flex items-center gap-2">
-                        <span className="px-2.5 py-1 bg-blue-50 text-brand-primary text-[10px] sm:text-[11px] font-bold rounded-lg group-hover:bg-white transition-colors block w-fit">
-                          {t.treatmentName}
-                        </span>
-                        {userRole === 'admin' && t.paymentPending && (
-                          <span className="flex items-center gap-1 px-1.5 py-0.5 bg-orange-50 text-orange-600 text-[8px] font-black uppercase rounded border border-orange-100 animate-pulse">
-                            <AlertCircle size={8} /> Pending Pay
-                          </span>
-                        )}
-                      </div>
                       {t.productUsage && (
-                        <div className="text-[9px] font-medium text-brand-muted italic pl-1 leading-tight">
-                          Level: {t.productUsage}
+                        <div className="text-[9px] font-medium text-brand-muted italic leading-tight">
+                          Intensity / Level: {t.productUsage}
                         </div>
                       )}
                       {t.products && t.products.length > 0 && (
@@ -1125,7 +1159,7 @@ export default function ClientDetail({
                     </div>
                   </td>
                   <td className="px-5 sm:px-8 py-3 sm:py-4 text-[11px] sm:text-sm font-medium text-brand-muted italic text-right whitespace-nowrap">
-                    {t.followUpDate ? format(t.followUpDate instanceof Date ? t.followUpDate : t.followUpDate.toDate(), 'dd-MMM-yy') : '--'}
+                    {t.followUpDate ? format(safeToDate(t.followUpDate), 'dd-MMM-yy') : '--'}
                   </td>
                   <td className="px-5 sm:px-8 py-3 sm:py-4 text-right">
                     <AnimatePresence mode="wait">

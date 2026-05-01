@@ -1,11 +1,12 @@
 import React, { useState, useEffect } from 'react';
 import { db } from '../lib/firebase';
 import { collection, query, where, getDocs, onSnapshot, orderBy, limit, Timestamp, addDoc, serverTimestamp } from 'firebase/firestore';
-import { Search, UserPlus, Phone, MapPin, Calendar, ClipboardList, Plus, ChevronRight, History, Trash2, AlertCircle, RefreshCw } from 'lucide-react';
+import { Search, UserPlus, Phone, MapPin, Calendar, ClipboardList, Plus, ChevronRight, History, Trash2, AlertCircle, RefreshCw, FileSpreadsheet } from 'lucide-react';
 import { doc, deleteDoc } from 'firebase/firestore';
 import { motion, AnimatePresence } from 'motion/react';
 import { format } from 'date-fns';
 import { Client, Treatment } from '../types';
+import BulkClientImport from './BulkClientImport';
 
 interface DashboardProps {
   userId: string;
@@ -20,6 +21,7 @@ export default function ClientDashboard({ userId, onSelectClient, onNewClient, o
   const [allClients, setAllClients] = useState<Client[]>([]);
   const [loading, setLoading] = useState(false);
   const [confirmingId, setConfirmingId] = useState<string | null>(null);
+  const [showImport, setShowImport] = useState(false);
 
   const handleDelete = (e: React.MouseEvent, id: string) => {
     e.stopPropagation();
@@ -69,7 +71,7 @@ export default function ClientDashboard({ userId, onSelectClient, onNewClient, o
       </div>
 
       <div className="flex flex-col sm:flex-row gap-4 sm:gap-6 items-center justify-between">
-        <div className="relative w-full sm:max-w-xl group order-2 sm:order-1">
+        <div className="relative w-full sm:max-w-xl group order-3 sm:order-1">
           <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-brand-muted group-focus-within:text-brand-primary transition-colors" size={16} />
           <input
             type="text"
@@ -80,14 +82,37 @@ export default function ClientDashboard({ userId, onSelectClient, onNewClient, o
           />
         </div>
 
-        <button
-          onClick={onNewClient}
-          className="w-full sm:w-auto btn-professional btn-primary order-1 sm:order-2 py-2.5 sm:py-3"
-        >
-          <UserPlus size={18} />
-          <span className="sm:inline font-bold">Register Patient</span>
-        </button>
+        <div className="flex w-full sm:w-auto gap-3 items-center order-1 sm:order-2">
+          <button
+            onClick={() => setShowImport(true)}
+            className="flex-1 sm:flex-none flex items-center justify-center gap-2 px-4 py-2.5 sm:py-3 bg-white border border-brand-border rounded-xl text-sm font-bold text-brand-secondary hover:border-brand-primary hover:text-brand-primary transition-all shadow-sm"
+          >
+            <FileSpreadsheet size={18} />
+            Import Excel
+          </button>
+          
+          <button
+            onClick={onNewClient}
+            className="flex-1 sm:flex-none btn-professional btn-primary py-2.5 sm:py-3"
+          >
+            <UserPlus size={18} />
+            <span className="sm:inline font-bold">Register Patient</span>
+          </button>
+        </div>
       </div>
+
+      <AnimatePresence>
+        {showImport && (
+          <BulkClientImport
+            userId={userId}
+            onClose={() => setShowImport(false)}
+            onComplete={() => {
+              setShowImport(false);
+              // The onSnapshot listener will handle the refresh automatically
+            }}
+          />
+        )}
+      </AnimatePresence>
 
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4 sm:gap-6">
         <AnimatePresence mode="popLayout">
