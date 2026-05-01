@@ -11,16 +11,17 @@ interface LeadDashboardProps {
   userId: string;
   onMarkVisited: (leadId: string) => void;
   onRequestDeleteLead?: (leadId: string) => void;
+  initialTab?: 'new' | 'existing';
 }
 
-export default function LeadDashboard({ userId, onMarkVisited, onRequestDeleteLead }: LeadDashboardProps) {
+export default function LeadDashboard({ userId, onMarkVisited, onRequestDeleteLead, initialTab }: LeadDashboardProps) {
   const [searchTerm, setSearchTerm] = useState('');
   const [leads, setLeads] = useState<Lead[]>([]);
   const [loading, setLoading] = useState(true);
   const [isFormOpen, setIsFormOpen] = useState(false);
   const [selectedLead, setSelectedLead] = useState<Lead | undefined>();
   const [filter, setFilter] = useState<'all' | 'today' | 'no_show' | 'pending' | 'visited'>('all');
-  const [activeTab, setActiveTab] = useState<'new' | 'existing'>('new');
+  const [activeTab, setActiveTab] = useState<'new' | 'existing'>(initialTab || 'new');
   const [confirmingDeleteId, setConfirmingDeleteId] = useState<string | null>(null);
 
   useEffect(() => {
@@ -104,37 +105,43 @@ export default function LeadDashboard({ userId, onMarkVisited, onRequestDeleteLe
       {/* Header */}
       <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 bg-white/50 p-4 rounded-3xl border border-brand-border/30">
         <div>
-          <h2 className="text-xl sm:text-2xl font-black text-brand-secondary tracking-tight uppercase tracking-tighter">Calling & Outreach</h2>
-          <p className="text-brand-muted text-xs sm:text-sm font-medium mt-0.5 italic">Manage inquiries and patient engagement records</p>
+          <h2 className="text-xl sm:text-2xl font-black text-brand-secondary tracking-tight uppercase tracking-tighter">
+            {activeTab === 'existing' ? 'Patient Outreach' : 'Inquiry Calling'}
+          </h2>
+          <p className="text-brand-muted text-xs sm:text-sm font-medium mt-0.5 italic">
+            {activeTab === 'existing' ? 'Connecting with current patients for follow-ups' : 'Managing new client inquiries and bookings'}
+          </p>
         </div>
         <button 
           onClick={() => { setSelectedLead(undefined); setIsFormOpen(true); }}
           className="w-full sm:w-auto flex items-center justify-center gap-2 px-6 py-3 bg-[#2ecc71] text-white rounded-xl text-sm font-black hover:bg-[#27ae60] transition-all shadow-lg shadow-emerald-500/20 uppercase tracking-widest"
         >
           <Plus size={18} />
-          New Call Entry
+          {activeTab === 'existing' ? 'Log Patient Call' : 'New Call Entry'}
         </button>
       </div>
 
       {/* Mode Switcher */}
-      <div className="flex bg-white p-1 rounded-2xl border border-brand-border shadow-sm max-w-sm">
-        <button 
-          onClick={() => setActiveTab('new')}
-          className={`flex-1 flex items-center justify-center gap-2 py-2.5 rounded-xl text-[11px] font-black uppercase tracking-widest transition-all ${activeTab === 'new' ? 'bg-brand-primary text-white shadow-md' : 'text-brand-muted hover:bg-slate-50'}`}
-        >
-          <UserPlus size={14} />
-          New Inquiries
-          <span className="ml-1 opacity-60">({leads.filter(l => !l.type || l.type === 'new').length})</span>
-        </button>
-        <button 
-          onClick={() => setActiveTab('existing')}
-          className={`flex-1 flex items-center justify-center gap-2 py-2.5 rounded-xl text-[11px] font-black uppercase tracking-widest transition-all ${activeTab === 'existing' ? 'bg-brand-primary text-white shadow-md' : 'text-brand-muted hover:bg-slate-50'}`}
-        >
-          <Users size={14} />
-          Patient Outreach
-          <span className="ml-1 opacity-60">({leads.filter(l => l.type === 'existing').length})</span>
-        </button>
-      </div>
+      {!initialTab && (
+        <div className="flex bg-white p-1 rounded-2xl border border-brand-border shadow-sm max-w-sm">
+          <button 
+            onClick={() => setActiveTab('new')}
+            className={`flex-1 flex items-center justify-center gap-2 py-2.5 rounded-xl text-[11px] font-black uppercase tracking-widest transition-all ${activeTab === 'new' ? 'bg-brand-primary text-white shadow-md' : 'text-brand-muted hover:bg-slate-50'}`}
+          >
+            <UserPlus size={14} />
+            New Inquiries
+            <span className="ml-1 opacity-60">({leads.filter(l => !l.type || l.type === 'new').length})</span>
+          </button>
+          <button 
+            onClick={() => setActiveTab('existing')}
+            className={`flex-1 flex items-center justify-center gap-2 py-2.5 rounded-xl text-[11px] font-black uppercase tracking-widest transition-all ${activeTab === 'existing' ? 'bg-brand-primary text-white shadow-md' : 'text-brand-muted hover:bg-slate-50'}`}
+          >
+            <Users size={14} />
+            Patient Outreach
+            <span className="ml-1 opacity-60">({leads.filter(l => l.type === 'existing').length})</span>
+          </button>
+        </div>
+      )}
 
       {/* Stats Quick Filter */}
       <div className="grid grid-cols-2 sm:grid-cols-5 gap-3">
@@ -346,6 +353,7 @@ export default function LeadDashboard({ userId, onMarkVisited, onRequestDeleteLe
             lead={selectedLead}
             onClose={() => setIsFormOpen(false)} 
             onSaved={() => { setIsFormOpen(false); }}
+            defaultType={activeTab}
           />
         )}
       </AnimatePresence>

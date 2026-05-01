@@ -12,10 +12,11 @@ interface LeadFormProps {
   lead?: Lead;
   onClose: () => void;
   onSaved: () => void;
+  defaultType?: 'new' | 'existing';
 }
 
-export default function LeadForm({ userId, lead, onClose, onSaved }: LeadFormProps) {
-  const [entryType, setEntryType] = useState<'new' | 'existing'>(lead?.type === 'existing' ? 'existing' : 'new');
+export default function LeadForm({ userId, lead, onClose, onSaved, defaultType }: LeadFormProps) {
+  const [entryType, setEntryType] = useState<'new' | 'existing'>(lead?.type || defaultType || 'new');
   const [formData, setFormData] = useState({
     name: lead?.name || '',
     phone: lead?.phone || '',
@@ -135,7 +136,10 @@ export default function LeadForm({ userId, lead, onClose, onSaved }: LeadFormPro
         <form onSubmit={handleSubmit} className="flex flex-col h-full sm:h-auto max-h-[100dvh] sm:max-h-[85vh]">
           <div className="p-4 sm:p-6 border-b border-brand-border/30 flex items-center justify-between bg-white">
             <h2 className="text-base sm:text-lg font-black text-brand-secondary flex items-center gap-2 uppercase tracking-tight">
-              {lead ? 'Update Call Log' : 'New Client Call Record'}
+              {lead ? 'Update Call Log' : 
+               defaultType === 'existing' ? 'Patient Outreach Record' : 
+               defaultType === 'new' ? 'New Inquiry Record' : 
+               'New Client Call Record'}
             </h2>
             <button type="button" onClick={onClose} className="p-2 hover:bg-slate-100 rounded-lg transition-colors text-brand-muted">
               <X size={20} />
@@ -144,7 +148,7 @@ export default function LeadForm({ userId, lead, onClose, onSaved }: LeadFormPro
 
           <div className="p-6 sm:p-8 space-y-4 sm:space-y-5 overflow-y-auto flex-1 scrollbar-hide">
             
-            {!lead && (
+            {!lead && !defaultType && (
               <div className="flex bg-white p-1 rounded-xl border border-brand-border mb-2">
                 <button 
                   type="button"

@@ -63,7 +63,7 @@ export default function DashboardView({
   const [showExportOptions, setShowExportOptions] = useState(false);
   const [showUpcomingFollowUps, setShowUpcomingFollowUps] = useState(false);
   const [showOutstandingDues, setShowOutstandingDues] = useState(false);
-  const [adminTab, setAdminTab] = useState<'pending' | 'staff' | 'calling' | 'reminders'>('reminders');
+  const [adminTab, setAdminTab] = useState<'pending' | 'staff' | 'calling' | 'reminders' | 'outreach'>('reminders');
 
   return (
     <div className="space-y-6 sm:space-y-8 max-w-7xl mx-auto pb-6">
@@ -183,7 +183,8 @@ export default function DashboardView({
                 { id: 'reminders', label: 'Due Reminders', count: 0 },
                 { id: 'pending', label: 'Pending Billing', count: pendingPayments.length },
                 { id: 'staff', label: 'Staff Inputs', count: treatmentsToday.filter(t => t.addedByRole === 'staff').length },
-                { id: 'calling', label: 'Calling updates', count: upcomingInquiries.length + upcomingFollowUps.length }
+                { id: 'calling', label: 'Inquiries', count: upcomingInquiries.filter(l => !l.type || l.type === 'new').length },
+                { id: 'outreach', label: 'Outreach', count: upcomingInquiries.filter(l => l.type === 'existing').length }
               ].map((tab) => (
                 <button
                   key={tab.id}
@@ -308,49 +309,86 @@ export default function DashboardView({
                   exit={{ opacity: 0, x: 10 }}
                   className="space-y-4"
                 >
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                    <div className="space-y-2">
-                      <label className="text-[9px] font-black text-emerald-600 uppercase tracking-widest ml-1">Planned Inquiries</label>
-                      <div className="space-y-2">
-                        {upcomingInquiries.length > 0 ? (
-                          upcomingInquiries.slice(0, 5).map(lead => (
-                            <div key={lead.id} className="bg-white p-2.5 rounded-xl border border-brand-border flex items-center justify-between">
-                               <div className="min-w-0">
-                                 <div className="text-[10px] font-bold text-brand-secondary truncate">{lead.name}</div>
-                                 <div className="text-[9px] text-brand-muted mt-0.5 flex items-center gap-1">
-                                    <Clock size={8} /> {format(lead.appointmentDate?.toDate ? lead.appointmentDate.toDate() : new Date(lead.appointmentDate), 'MMM d')}
-                                 </div>
+                  <div className="space-y-2">
+                    <label className="text-[9px] font-black text-emerald-600 uppercase tracking-widest ml-1">Planned Inquiries</label>
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                      {upcomingInquiries.filter(l => !l.type || l.type === 'new').length > 0 ? (
+                        upcomingInquiries.filter(l => !l.type || l.type === 'new').slice(0, 8).map(lead => (
+                          <div key={lead.id} className="bg-white p-3 rounded-xl border border-brand-border flex items-center justify-between shadow-sm hover:border-emerald-200 transition-colors">
+                             <div className="min-w-0">
+                               <div className="text-[11px] font-bold text-brand-secondary truncate">{lead.name}</div>
+                               <div className="text-[9px] text-brand-muted mt-0.5 flex items-center gap-1 font-medium">
+                                  <Clock size={8} /> {format(lead.appointmentDate?.toDate ? lead.appointmentDate.toDate() : new Date(lead.appointmentDate), 'dd MMM (EEE)')}
                                </div>
-                               <a href={`tel:${lead.phone}`} className="p-1.5 bg-emerald-50 text-emerald-600 rounded-lg border border-emerald-100">
-                                 <Phone size={12} />
+                             </div>
+                             <div className="flex items-center gap-2">
+                               <a href={`tel:${lead.phone}`} className="p-2 bg-emerald-50 text-emerald-600 rounded-lg border border-emerald-100 hover:bg-emerald-100 transition-colors">
+                                 <Phone size={14} />
                                </a>
-                            </div>
-                          ))
-                        ) : (
-                          <div className="p-4 text-[10px] text-brand-muted italic text-center">No inquires to call</div>
-                        )}
-                      </div>
+                             </div>
+                          </div>
+                        ))
+                      ) : (
+                        <div className="col-span-full p-8 text-[11px] text-brand-muted italic text-center bg-slate-50/50 rounded-2xl border border-dashed border-brand-border">No new inquires to call</div>
+                      )}
                     </div>
+                  </div>
+                </motion.div>
+              )}
 
+              {adminTab === 'outreach' && (
+                <motion.div 
+                  key="outreach"
+                  initial={{ opacity: 0, x: -10 }}
+                  animate={{ opacity: 1, x: 0 }}
+                  exit={{ opacity: 0, x: 10 }}
+                  className="space-y-4"
+                >
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                     <div className="space-y-2">
-                      <label className="text-[9px] font-black text-brand-primary uppercase tracking-widest ml-1">Scheduled Follow-ups</label>
+                      <label className="text-[9px] font-black text-blue-600 uppercase tracking-widest ml-1">Patient Follow-up Tasks</label>
                       <div className="space-y-2">
                         {upcomingFollowUps.length > 0 ? (
                           upcomingFollowUps.slice(0, 5).map(item => (
-                            <div key={item.id} className="bg-white p-2.5 rounded-xl border border-brand-border flex items-center justify-between">
+                            <div key={item.id} className="bg-white p-3 rounded-xl border border-brand-border flex items-center justify-between shadow-sm">
                                <div className="min-w-0">
-                                 <div className="text-[10px] font-bold text-brand-secondary truncate">{item.clientName || clientDataMap[item.parentId!]?.name}</div>
+                                 <div className="text-[11px] font-bold text-brand-secondary truncate">{item.clientName || clientDataMap[item.parentId!]?.name}</div>
                                  <div className="text-[9px] text-brand-muted mt-0.5 flex items-center gap-1">
                                     <Clock size={8} /> {format(item.followUpDate?.toDate ? item.followUpDate.toDate() : new Date(item.followUpDate), 'MMM d')}
                                  </div>
                                </div>
-                               <button onClick={() => item.parentId && onSelectPatient(item.parentId)} className="p-1.5 bg-blue-50 text-brand-primary rounded-lg border border-blue-100">
-                                 <History size={12} />
+                               <button onClick={() => item.parentId && onSelectPatient(item.parentId)} className="p-2 bg-blue-50 text-brand-primary rounded-lg border border-blue-100 hover:bg-blue-100 transition-colors shadow-sm">
+                                 <History size={14} />
                                </button>
                             </div>
                           ))
                         ) : (
                           <div className="p-4 text-[10px] text-brand-muted italic text-center">No follow-ups to call</div>
+                        )}
+                      </div>
+                    </div>
+
+                    <div className="space-y-2">
+                      <label className="text-[9px] font-black text-purple-600 uppercase tracking-widest ml-1">Recent Outreach Records</label>
+                      <div className="space-y-2">
+                        {upcomingInquiries.filter(l => l.type === 'existing').length > 0 ? (
+                          upcomingInquiries.filter(l => l.type === 'existing').slice(0, 5).map(lead => (
+                            <div key={lead.id} className="bg-white p-3 rounded-xl border border-brand-border flex items-center justify-between shadow-sm">
+                               <div className="min-w-0">
+                                 <div className="text-[11px] font-bold text-brand-secondary truncate">{lead.name}</div>
+                                 <div className="text-[9px] text-brand-muted mt-0.5 flex items-center gap-1 font-medium">
+                                    <Users size={8} /> {lead.doctorName || 'General'}
+                                 </div>
+                               </div>
+                               <div className="flex gap-2">
+                                <a href={`tel:${lead.phone}`} className="p-2 bg-purple-50 text-purple-600 rounded-lg border border-purple-100 hover:bg-purple-100 transition-colors">
+                                  <Phone size={14} />
+                                </a>
+                               </div>
+                            </div>
+                          ))
+                        ) : (
+                          <div className="p-4 text-[10px] text-brand-muted italic text-center text-slate-400">No recent outreach records</div>
                         )}
                       </div>
                     </div>

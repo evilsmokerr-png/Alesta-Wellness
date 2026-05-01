@@ -17,7 +17,7 @@ import PasswordVerificationModal from './components/PasswordVerificationModal';
 import { Client, Lead } from './types';
 import { handleFirestoreError } from './lib/errorHandlers';
 
-type ViewType = 'dashboard' | 'clients' | 'notifications' | 'leads' | 'sales-history' | 'activity';
+type ViewType = 'dashboard' | 'clients' | 'notifications' | 'leads' | 'outreach' | 'sales-history' | 'activity';
 
 export default function App() {
   const [user, setUser] = useState<User | null>(null);
@@ -718,6 +718,15 @@ export default function App() {
             Inquiries
           </button>
           <button 
+            onClick={() => handleNavClick('outreach')}
+            className={`w-full flex items-center gap-3 px-4 py-2.5 rounded-lg font-medium text-sm transition-all ${
+              view === 'outreach' ? 'bg-purple-50 text-purple-600' : 'text-brand-muted hover:bg-slate-50'
+            }`}
+          >
+            <Users size={18} />
+            Patient Outreach
+          </button>
+          <button 
             onClick={() => handleNavClick('notifications')}
             className={`w-full flex items-center gap-3 px-4 py-2.5 rounded-lg font-medium text-sm transition-all ${
               view === 'notifications' ? 'bg-blue-50 text-brand-primary' : 'text-brand-muted hover:bg-slate-50'
@@ -835,13 +844,13 @@ export default function App() {
                      </div>
                    </div>
 
-                   {leadsDueList.length > 0 && (
+                   {leadsDueList.filter(l => !l.type || l.type === 'new').length > 0 && (
                      <div className="space-y-4">
                        <div className="flex items-center gap-2 px-2 text-[#2ecc71]">
                          <Bell size={18} />
                          <h3 className="font-bold text-sm uppercase tracking-widest">Inquiry Appointments Due</h3>
                        </div>
-                       {leadsDueList.map((lead, idx) => {
+                       {leadsDueList.filter(l => !l.type || l.type === 'new').map((lead, idx) => {
                          const apptDate = lead.appointmentDate?.toDate ? lead.appointmentDate.toDate() : new Date(lead.appointmentDate);
                          return (
                            <motion.div 
@@ -1010,6 +1019,128 @@ export default function App() {
                                   </AnimatePresence>
                                 </div>
                              </div>
+                           </motion.div>
+                         );
+                       })}
+                     </div>
+                   )}
+
+                   {leadsDueList.filter(l => l.type === 'existing').length > 0 && (
+                     <div className="space-y-4 pt-6">
+                       <div className="flex items-center gap-2 px-2 text-purple-600">
+                         <Users size={18} />
+                         <h3 className="font-bold text-sm uppercase tracking-widest">Patient Outreach Calls Due</h3>
+                       </div>
+                       {leadsDueList.filter(l => l.type === 'existing').map((lead, idx) => {
+                         const apptDate = lead.appointmentDate?.toDate ? lead.appointmentDate.toDate() : new Date(lead.appointmentDate);
+                         return (
+                           <motion.div 
+                             key={lead.id} 
+                             initial={{ opacity: 0, x: -10 }}
+                             animate={{ opacity: 1, x: 0 }}
+                             transition={{ delay: idx * 0.05 }}
+                             className="bg-white rounded-2xl border border-brand-border overflow-hidden shadow-sm hover:shadow-md transition-all group"
+                           >
+                             <div className="p-4 sm:p-6 space-y-4">
+                               <div className="flex items-start justify-between border-b border-slate-50 pb-4">
+                                 <div className="flex items-center gap-3 sm:gap-4">
+                                   <div className="w-10 h-10 sm:w-12 sm:h-12 rounded-2xl bg-purple-50 text-purple-600 flex items-center justify-center border border-purple-100 flex-shrink-0">
+                                     <Users size={20} />
+                                   </div>
+                                   <div className="min-w-0">
+                                     <div className="text-base sm:text-lg font-bold text-brand-secondary leading-tight truncate">
+                                       {lead.name}
+                                     </div>
+                                     <div className="flex flex-wrap items-center gap-x-2 gap-y-1 mt-1">
+                                       <a href={`tel:${lead.phone.replace(/\D/g, '')}`} className="text-xs font-medium text-brand-primary flex items-center gap-1.5 hover:underline bg-blue-50/50 px-2 py-0.5 rounded-full">
+                                         <Phone size={12} /> {lead.phone}
+                                       </a>
+                                       <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-purple-50 text-purple-600 border border-purple-100">
+                                         OUTREACH RECORD
+                                       </span>
+                                     </div>
+                                   </div>
+                                 </div>
+                                 <div className="hidden sm:flex flex-col items-end">
+                                   <div className="text-[10px] font-bold text-brand-muted uppercase tracking-widest mb-1">Due Date</div>
+                                   <div className="text-xs font-bold px-2 py-1 rounded bg-slate-100 text-brand-secondary">
+                                     {format(apptDate, 'MMM d, yyyy')}
+                                   </div>
+                                 </div>
+                               </div>
+
+                               <div className="grid grid-cols-1 sm:grid-cols-4 gap-4">
+                                 <div className="space-y-1">
+                                   <div className="text-[10px] font-bold text-brand-muted uppercase tracking-widest flex items-center gap-1">
+                                     <Users size={10} className="text-purple-500" />
+                                     Doctor
+                                   </div>
+                                   <div className="text-sm font-bold text-brand-secondary">{lead.doctorName || '--'}</div>
+                                 </div>
+                                 <div className="space-y-1">
+                                   <div className="text-[10px] font-bold text-brand-muted uppercase tracking-widest flex items-center gap-1">
+                                     <Stethoscope size={10} className="text-brand-primary" />
+                                     Plan
+                                   </div>
+                                   <div className="text-sm font-semibold text-brand-secondary truncate">{lead.upcomingTreatment || 'Review'}</div>
+                                 </div>
+                                 <div className="space-y-1">
+                                   <div className="text-[10px] font-bold text-brand-muted uppercase tracking-widest flex items-center gap-1">
+                                     <Clock size={10} className="text-orange-500" />
+                                     Status
+                                   </div>
+                                   <div className="text-sm font-bold text-brand-secondary uppercase tracking-tighter">{lead.status.replace('_', ' ')}</div>
+                                 </div>
+                                 <div className="space-y-1">
+                                   <div className="text-[10px] font-bold text-brand-muted uppercase tracking-widest flex items-center gap-1">
+                                     <CheckCircle2 size={10} className="text-emerald-500" />
+                                     Last Log
+                                   </div>
+                                   <div className="text-sm font-medium text-brand-muted">
+                                     {lead.updatedAt?.toDate ? format(lead.updatedAt.toDate(), 'MMM d, p') : 'Recent'}
+                                   </div>
+                                 </div>
+                               </div>
+
+                              {lead.notes && (
+                                <div className="bg-purple-50/30 rounded-2xl p-5 border border-purple-100 mt-2">
+                                  <div className="text-[10px] font-bold text-purple-600 uppercase tracking-widest flex items-center gap-2 mb-3">
+                                    <StickyNote size={10} />
+                                    Outreach Clinical Notes
+                                  </div>
+                                  <p className="text-sm text-brand-secondary leading-relaxed italic">
+                                    "{lead.notes}"
+                                  </p>
+                                </div>
+                              )}
+                            </div>
+
+                            <div className="bg-slate-50 border-t border-slate-100 p-4 flex items-center justify-between sm:px-6">
+                              <button 
+                                onClick={() => setView('outreach')}
+                                className="hidden sm:flex items-center gap-2 text-xs font-bold text-brand-muted hover:text-purple-600 transition-colors uppercase tracking-widest"
+                              >
+                                <Users size={14} />
+                                View All Outreach
+                               </button>
+                               <div className="flex gap-2 w-full sm:w-auto items-center">
+                                 <button 
+                                   onClick={() => setRescheduleData({ type: 'lead', data: lead })}
+                                   className="flex-1 sm:flex-none flex items-center justify-center gap-2 px-4 py-2 bg-white border border-brand-border rounded-lg text-xs font-bold text-brand-secondary hover:border-brand-primary/30 transition-all shadow-sm"
+                                 >
+                                   <RefreshCw size={14} /> Reschedule
+                                 </button>
+                                 <a href={`tel:${lead.phone.replace(/\D/g, '')}`} className="flex-1 sm:flex-none flex items-center justify-center gap-2 px-4 py-2 bg-white border border-brand-border rounded-lg text-xs font-bold text-brand-secondary hover:border-brand-primary/30 transition-all shadow-sm">
+                                   <Phone size={14} /> Call Now
+                                 </a>
+                                 <button 
+                                   onClick={() => handleMarkLeadVisited(lead.id!)}
+                                   className="flex-3 sm:flex-none flex items-center justify-center gap-2 px-4 py-2 bg-purple-600 text-white rounded-lg text-xs font-bold hover:bg-purple-700 transition-all shadow-md shadow-purple-500/10"
+                                 >
+                                   <CheckCircle2 size={14} /> Mark Completed
+                                 </button>
+                               </div>
+                            </div>
                            </motion.div>
                          );
                        })}
@@ -1537,6 +1668,21 @@ export default function App() {
                     userId={user.uid} 
                     onMarkVisited={handleMarkLeadVisited} 
                     onRequestDeleteLead={handleDeleteLead}
+                    initialTab="new"
+                  />
+                </motion.div>
+              ) : view === 'outreach' ? (
+                <motion.div
+                  key="outreach"
+                  initial={{ opacity: 0, y: 20 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  exit={{ opacity: 0, y: -20 }}
+                >
+                  <LeadDashboard 
+                    userId={user.uid} 
+                    onMarkVisited={handleMarkLeadVisited} 
+                    onRequestDeleteLead={handleDeleteLead}
+                    initialTab="existing"
                   />
                 </motion.div>
               ) : (
