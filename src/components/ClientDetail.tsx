@@ -1108,7 +1108,7 @@ export default function ClientDetail({
                   <td className="px-5 sm:px-8 py-3 sm:py-4">
                     <div className="space-y-1">
                       {t.productUsage && (
-                        <div className="text-[9px] font-medium text-brand-muted italic leading-tight">
+                        <div className="text-[10px] font-bold text-brand-secondary leading-tight">
                           Intensity / Level: {t.productUsage}
                         </div>
                       )}
