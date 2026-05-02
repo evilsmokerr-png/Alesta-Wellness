@@ -5,6 +5,7 @@ import { Search, UserPlus, Phone, MapPin, Calendar, ClipboardList, Plus, Chevron
 import { doc, deleteDoc } from 'firebase/firestore';
 import { motion, AnimatePresence } from 'motion/react';
 import { format } from 'date-fns';
+import { safeFormat } from '../lib/dateUtils';
 import { Client, Treatment } from '../types';
 import BulkClientImport from './BulkClientImport';
 
@@ -41,7 +42,7 @@ export default function ClientDashboard({ userId, onSelectClient, onNewClient, o
     );
 
     const unsubscribe = onSnapshot(q, (snapshot) => {
-      setAllClients(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Client)));
+      setAllClients(snapshot.docs.map(doc => ({ id: doc.id, ...(doc.data() as object) } as Client)));
       setLoading(false);
     }, (error) => {
       console.error("Error fetching patients:", error);
@@ -205,7 +206,7 @@ export default function ClientDashboard({ userId, onSelectClient, onNewClient, o
                   <div className="flex flex-col pt-2.5 border-t border-slate-50">
                     <span className="text-[10px] font-bold text-brand-muted uppercase tracking-wider mb-0.5">Updated</span>
                     <span className="text-[11px] sm:text-xs font-bold text-brand-secondary italic">
-                      {client.updatedAt?.toDate ? format(client.updatedAt.toDate(), 'MMM d, yyyy') : 'Recently'}
+                      {safeFormat(client.updatedAt, 'MMM d, yyyy', 'Recently')}
                     </span>
                   </div>
                 </div>

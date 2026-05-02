@@ -24,6 +24,7 @@ export interface Lead {
   type?: 'new' | 'existing';
   doctorName?: string;
   upcomingTreatment?: string;
+  logDate?: any;
   createdAt: any;
   updatedAt: any;
 }

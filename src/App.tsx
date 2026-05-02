@@ -5,6 +5,7 @@ import { motion, AnimatePresence } from 'motion/react';
 import { db } from './lib/firebase';
 import { collection, collectionGroup, query, where, onSnapshot, orderBy, limit, doc, getDoc, getDocs, updateDoc, deleteDoc, serverTimestamp, addDoc } from 'firebase/firestore';
 import { startOfDay, endOfDay, startOfMonth, endOfMonth, format, isToday, addDays, isBefore } from 'date-fns';
+import { safeFormat } from './lib/dateUtils';
 import Auth from './components/Auth';
 import DashboardView from './components/DashboardView';
 import ClientDashboard from './components/ClientDashboard';
@@ -23,6 +24,7 @@ export default function App() {
   const [user, setUser] = useState<User | null>(null);
   const [userRole, setUserRole] = useState<'admin' | 'staff'>((localStorage.getItem('userRole') as any) || 'staff');
   const [selectedClient, setSelectedClient] = useState<Client | null>(null);
+  const [openingTreatmentForm, setOpeningTreatmentForm] = useState(false);
   const [isFormOpen, setIsFormOpen] = useState(false);
   const [view, setView] = useState<ViewType>('dashboard');
   
@@ -49,6 +51,7 @@ export default function App() {
   const [finalizingPayment, setFinalizingPayment] = useState<any | null>(null);
   const [masterTreatments, setMasterTreatments] = useState<string[]>([]);
   const [masterProducts, setMasterProducts] = useState<string[]>([]);
+  const [allTreatments, setAllTreatments] = useState<any[]>([]);
 
   const [rescheduleData, setRescheduleData] = useState<{ type: 'lead' | 'followup', data: any } | null>(null);
   const [confirmingDeleteId, setConfirmingDeleteId] = useState<string | null>(null);
@@ -78,6 +81,22 @@ export default function App() {
     const notificationThreshold = endOfDay(addDays(new Date(), 1));
     const monthStart = startOfMonth(new Date());
     const monthEnd = endOfMonth(new Date());
+
+    let unsubAllTreatments = () => {};
+    if (userRole === 'admin') {
+      const allQ = query(
+        collectionGroup(db, 'treatments'),
+        where('ownerId', '==', user.uid),
+        orderBy('date', 'desc')
+      );
+      unsubAllTreatments = onSnapshot(allQ, (snapshot) => {
+        setAllTreatments(snapshot.docs.map(doc => ({
+          id: doc.id,
+          parentId: doc.ref.parent.parent?.id,
+          ...doc.data()
+        })));
+      });
+    }
 
     // 1. Treatments Today
     const treatmentsTodayQuery = query(
@@ -352,6 +371,7 @@ export default function App() {
       unsubMonthSales();
       unsubDues();
       unsubPendingPayments();
+      unsubAllTreatments();
     };
   }, [user]);
 
@@ -495,7 +515,9 @@ export default function App() {
 
       // 3. Open the client record directly
       if (targetClient) {
+        setOpeningTreatmentForm(true);
         setSelectedClient(targetClient);
+        setView('clients');
       }
 
     } catch (error) {
@@ -816,12 +838,16 @@ export default function App() {
                     userId={user.uid}
                     userRole={userRole}
                     client={selectedClient} 
-                    onBack={() => setSelectedClient(null)} 
+                    onBack={() => {
+                      setSelectedClient(null);
+                      setOpeningTreatmentForm(false);
+                    }} 
                     onUpdate={setSelectedClient}
                     masterTreatments={masterTreatments}
                     masterProducts={masterProducts}
                     onRequestDeleteClient={handleDeleteClient}
                     onRequestDeleteTreatment={handleDeleteTreatmentRecord}
+                    initialAddTreatment={openingTreatmentForm}
                   />
                 </motion.div>
               ) : view === 'notifications' ? (
@@ -926,7 +952,7 @@ export default function App() {
                                       Last Update
                                     </div>
                                     <div className="text-sm font-medium text-brand-muted">
-                                      {lead.updatedAt?.toDate ? format(lead.updatedAt.toDate(), 'MMM d, p') : 'Pending'}
+                                      {safeFormat(lead.updatedAt, 'MMM d, p', 'Pending')}
                                     </div>
                                   </div>
                                 </div>
@@ -981,7 +1007,7 @@ export default function App() {
                                       <>
                                         <button 
                                           onClick={() => {
-                                            const dateStr = format(apptDate, 'dd MMM (EEEE)');
+                                            const dateStr = safeFormat(apptDate, 'dd MMM (EEEE)');
                                             const message = `Hi ${lead.name}! Just a quick reminder from Alesta Wellness about your scheduled visit on ${dateStr}. Please let us know if you have any questions!`;
                                             const encodedMsg = encodeURIComponent(message);
                                             const phone = lead.phone.replace(/\D/g, '');
@@ -1097,7 +1123,7 @@ export default function App() {
                                      Last Log
                                    </div>
                                    <div className="text-sm font-medium text-brand-muted">
-                                     {lead.updatedAt?.toDate ? format(lead.updatedAt.toDate(), 'MMM d, p') : 'Recent'}
+                                     {safeFormat(lead.updatedAt, 'MMM d, p', 'Recent')}
                                    </div>
                                  </div>
                                </div>
@@ -1215,7 +1241,7 @@ export default function App() {
                                <div className="hidden sm:flex flex-col items-end">
                                  <div className="text-[10px] font-bold text-brand-muted uppercase tracking-widest mb-1">Last Log Date</div>
                                  <div className="text-xs font-bold text-brand-secondary bg-slate-100 px-2 py-1 rounded">
-                                   {item.date?.toDate ? format(item.date.toDate(), 'MMM d, yyyy') : 'Recently'}
+                                   {safeFormat(item.date, 'MMM d, yyyy', 'Recently')}
                                  </div>
                                </div>
                              </div>
@@ -1274,7 +1300,7 @@ export default function App() {
                                      Next Scheduled Follow-up
                                    </div>
                                    <div className="text-sm font-bold text-brand-primary flex items-center gap-1">
-                                     {item.followUpDate?.toDate ? format(item.followUpDate.toDate(), 'MMMM d, yyyy') : 'No date'}
+                                     {safeFormat(item.followUpDate, 'MMMM d, yyyy', 'No date')}
                                    </div>
                                  </div>
                                </div>
@@ -1298,7 +1324,7 @@ export default function App() {
 
                              {/* Mobile Footer Meta */}
                              <div className="sm:hidden flex items-center justify-between pt-2">
-                               <div className="text-[10px] font-bold text-brand-muted uppercase tracking-widest">Logged: {item.date?.toDate ? format(item.date.toDate(), 'MMM d') : 'N/A'}</div>
+                               <div className="text-[10px] font-bold text-brand-muted uppercase tracking-widest">Logged: {safeFormat(item.date, 'MMM d', 'N/A')}</div>
                                <button 
                                  onClick={() => {
                                    if (item.parentId) {
@@ -1355,7 +1381,7 @@ export default function App() {
                                           const phoneValue = item.clientPhone || clientDataMap[item.parentId!]?.phone || '';
                                           const nameValue = item.clientName || clientDataMap[item.parentId!]?.name || 'Patient';
                                           const fDate = item.followUpDate?.toDate ? item.followUpDate.toDate() : new Date(item.followUpDate);
-                                          const dateStr = format(fDate, 'dd MMM (EEEE)');
+                                          const dateStr = safeFormat(fDate, 'dd MMM (EEEE)');
                                           const message = `Hello ${nameValue}, this is Alesta Wellness. Your follow-up session for ${item.treatmentName} is due on ${dateStr}. Looking forward to seeing you!`;
                                           const encodedMsg = encodeURIComponent(message);
                                           const phone = phoneValue.replace(/\D/g, '');
@@ -1458,7 +1484,7 @@ export default function App() {
                                    <div className="min-w-0">
                                      <div className="flex items-center gap-2">
                                        <span className="text-sm font-bold text-brand-secondary truncate">{clientName}</span>
-                                       <span className="text-[10px] text-brand-muted font-mono">{format(tDate, 'dd MMM')}</span>
+                                       <span className="text-[10px] text-brand-muted font-mono">{safeFormat(tDate, 'dd MMM')}</span>
                                      </div>
                                      <div className="text-[11px] font-medium text-brand-muted truncate mt-0.5">{treatment.treatmentName}</div>
                                      <div className="flex items-center gap-3 mt-2">
@@ -1526,6 +1552,7 @@ export default function App() {
                     setConfirmingDeleteId={setConfirmingDeleteId}
                     onWipeAllData={handleWipeAllData}
                     onExportData={handleExportData}
+                    allTreatments={allTreatments}
                   />
                 </motion.div>
               ) : view === 'activity' ? (
@@ -1588,7 +1615,7 @@ export default function App() {
                                  <div className="hidden sm:flex flex-col items-end">
                                    <div className="text-[10px] font-bold text-brand-muted uppercase tracking-widest mb-1 font-mono">Timestamp</div>
                                    <div className="text-xs font-bold px-2 py-1 rounded bg-slate-50 text-brand-secondary">
-                                     {treatment.date?.toDate ? format(treatment.date.toDate(), 'h:mm a') : 'Now'}
+                                     {safeFormat(treatment.date, 'h:mm a', 'Now')}
                                    </div>
                                  </div>
                                </div>
@@ -1614,7 +1641,7 @@ export default function App() {
                                       Follow-up Scheduled
                                     </div>
                                     <div className="text-sm font-bold text-brand-secondary italic">
-                                      {treatment.followUpDate ? format(treatment.followUpDate.toDate ? treatment.followUpDate.toDate() : new Date(treatment.followUpDate), 'MMM d, yyyy') : 'No Follow-up'}
+                                      {safeFormat(treatment.followUpDate, 'MMM d, yyyy', 'No Follow-up')}
                                     </div>
                                   </div>
                                </div>

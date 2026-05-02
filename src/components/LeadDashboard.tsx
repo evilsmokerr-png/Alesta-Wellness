@@ -4,6 +4,7 @@ import { collection, query, where, onSnapshot, orderBy, limit, doc, deleteDoc, s
 import { Search, UserPlus, Users, Phone, Calendar, ClipboardList, Plus, ChevronRight, RefreshCw, Trash2, Clock, AlertTriangle, CheckCircle2, Tag, MessageSquare, Pencil, MessageCircle, Stethoscope } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { format, isToday, isPast, isFuture } from 'date-fns';
+import { safeFormat } from '../lib/dateUtils';
 import { Lead } from '../types';
 import LeadForm from './LeadForm';
 
@@ -21,6 +22,7 @@ export default function LeadDashboard({ userId, onMarkVisited, onRequestDeleteLe
   const [isFormOpen, setIsFormOpen] = useState(false);
   const [selectedLead, setSelectedLead] = useState<Lead | undefined>();
   const [filter, setFilter] = useState<'all' | 'today' | 'no_show' | 'pending' | 'visited'>('all');
+  const [selectedDate, setSelectedDate] = useState<string>(format(new Date(), 'yyyy-MM-dd'));
   const [activeTab, setActiveTab] = useState<'new' | 'existing'>(initialTab || 'new');
   const [confirmingDeleteId, setConfirmingDeleteId] = useState<string | null>(null);
 
@@ -36,7 +38,7 @@ export default function LeadDashboard({ userId, onMarkVisited, onRequestDeleteLe
     );
 
     const unsubscribe = onSnapshot(q, (snapshot) => {
-      setLeads(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Lead)));
+      setLeads(snapshot.docs.map(doc => ({ id: doc.id, ...(doc.data() as object) } as Lead)));
       setLoading(false);
     }, (error) => {
       console.error("Error fetching leads:", error);
@@ -50,13 +52,28 @@ export default function LeadDashboard({ userId, onMarkVisited, onRequestDeleteLe
     const isCorrectType = activeTab === 'existing' ? lead.type === 'existing' : (lead.type === 'new' || !lead.type);
     if (!isCorrectType) return false;
 
-    const matchesSearch = lead.name.toLowerCase().includes(searchTerm.toLowerCase()) || 
-                         lead.phone.includes(searchTerm);
+    const matchesSearch = 
+      lead.name.toLowerCase().includes(searchTerm.toLowerCase()) || 
+      lead.phone.includes(searchTerm) ||
+      (lead.doctorName && lead.doctorName.toLowerCase().includes(searchTerm.toLowerCase())) ||
+      (lead.upcomingTreatment && lead.upcomingTreatment.toLowerCase().includes(searchTerm.toLowerCase())) ||
+      (lead.notes && lead.notes.toLowerCase().includes(searchTerm.toLowerCase()));
     
     if (!matchesSearch) return false;
 
     const apptDate = lead.appointmentDate?.toDate ? lead.appointmentDate.toDate() : new Date(lead.appointmentDate);
+    const logDate = lead.logDate?.toDate ? lead.logDate.toDate() : (lead.logDate ? new Date(lead.logDate) : null);
+    const createdDate = lead.createdAt?.toDate ? lead.createdAt.toDate() : (lead.createdAt ? new Date(lead.createdAt) : apptDate);
     
+    // For outreach, we also filter by selected date if the filter is not 'all' or specifically 'today'
+    if (activeTab === 'existing' && filter === 'all') {
+      const apptDateStr = safeFormat(apptDate, 'yyyy-MM-dd');
+      const createdDateStr = safeFormat(createdDate, 'yyyy-MM-dd');
+      const logDateStr = logDate ? safeFormat(logDate, 'yyyy-MM-dd') : null;
+      // Show if it was scheduled for this day OR if the log was actually created on this day OR if logDate matches
+      if (apptDateStr !== selectedDate && createdDateStr !== selectedDate && logDateStr !== selectedDate) return false;
+    }
+
     if (filter === 'today') return isToday(apptDate);
     if (filter === 'no_show') return lead.status === 'no_show' || (isPast(apptDate) && !isToday(apptDate) && lead.status === 'appointment_set');
     if (filter === 'pending') return lead.status === 'enquiry' || lead.status === 'appointment_set';
@@ -144,34 +161,52 @@ export default function LeadDashboard({ userId, onMarkVisited, onRequestDeleteLe
       )}
 
       {/* Stats Quick Filter */}
-      <div className="grid grid-cols-2 sm:grid-cols-5 gap-3">
-        {[
-          { id: 'all', label: 'All', icon: ClipboardList, color: 'text-slate-600', bg: 'bg-slate-50' },
-          { id: 'today', label: 'Today', icon: Clock, color: 'text-blue-600', bg: 'bg-blue-50' },
-          { id: 'pending', label: 'Pending', icon: Calendar, color: 'text-orange-600', bg: 'bg-orange-50' },
-          { id: 'visited', label: 'Visited', icon: CheckCircle2, color: 'text-emerald-600', bg: 'bg-emerald-50' },
-          { id: 'no_show', label: 'No Shows', icon: AlertTriangle, color: 'text-red-600', bg: 'bg-red-50' },
-        ].map((item) => (
-          <button
-            key={item.id}
-            onClick={() => setFilter(item.id as any)}
-            className={`p-3 rounded-2xl border transition-all flex flex-col items-center gap-2 ${
-              filter === item.id 
-                ? 'bg-white border-brand-primary shadow-md ring-2 ring-brand-primary/5' 
-                : 'bg-white border-brand-border hover:bg-slate-50'
-            }`}
-          >
-            <div className={`w-8 h-8 ${item.bg} ${item.color} rounded-lg flex items-center justify-center relative`}>
-              <item.icon size={16} />
-              {(counts as any)[item.id] > 0 && (
-                <span className="absolute -top-1.5 -right-1.5 min-w-[16px] h-4 flex items-center justify-center bg-white border border-slate-100 rounded-full text-[9px] font-black shadow-sm px-1">
-                  {(counts as any)[item.id]}
-                </span>
-              )}
-            </div>
-            <span className="text-[10px] font-bold uppercase tracking-widest text-brand-muted">{item.label}</span>
-          </button>
-        ))}
+      <div className="flex flex-col sm:flex-row gap-6">
+        <div className="flex-1 grid grid-cols-2 sm:grid-cols-5 gap-3">
+          {[
+            { id: 'all', label: 'All', icon: ClipboardList, color: 'text-slate-600', bg: 'bg-slate-50' },
+            { id: 'today', label: 'Today', icon: Clock, color: 'text-blue-600', bg: 'bg-blue-50' },
+            { id: 'pending', label: 'Pending', icon: Calendar, color: 'text-orange-600', bg: 'bg-orange-50' },
+            { id: 'visited', label: 'Visited', icon: CheckCircle2, color: 'text-emerald-600', bg: 'bg-emerald-50' },
+            { id: 'no_show', label: 'No Shows', icon: AlertTriangle, color: 'text-red-600', bg: 'bg-red-50' },
+          ].map((item) => (
+            <button
+              key={item.id}
+              onClick={() => setFilter(item.id as any)}
+              className={`p-3 rounded-2xl border transition-all flex flex-col items-center gap-2 ${
+                filter === item.id 
+                  ? 'bg-white border-brand-primary shadow-md ring-2 ring-brand-primary/5' 
+                  : 'bg-white border-brand-border hover:bg-slate-50'
+              }`}
+            >
+              <div className={`w-8 h-8 ${item.bg} ${item.color} rounded-lg flex items-center justify-center relative`}>
+                <item.icon size={16} />
+                {(counts as any)[item.id] > 0 && (
+                  <span className="absolute -top-1.5 -right-1.5 min-w-[16px] h-4 flex items-center justify-center bg-white border border-slate-100 rounded-full text-[9px] font-black shadow-sm px-1">
+                    {(counts as any)[item.id]}
+                  </span>
+                )}
+              </div>
+              <span className="text-[10px] font-bold uppercase tracking-widest text-brand-muted">{item.label}</span>
+            </button>
+          ))}
+        </div>
+
+        {activeTab === 'existing' && filter === 'all' && (
+          <div className="bg-white border border-brand-border rounded-2xl p-4 flex flex-col justify-center gap-2 shadow-sm min-w-[200px]">
+             <div className="flex items-center gap-2 text-[10px] font-bold text-brand-muted uppercase tracking-widest px-1">
+               <Calendar size={12} className="text-brand-primary" />
+               Select Log Date
+             </div>
+             <input 
+               type="date"
+               className="w-full px-4 py-2 bg-slate-50 border border-brand-border rounded-xl text-sm font-bold text-brand-secondary outline-none focus:border-brand-primary transition-all"
+               value={selectedDate}
+               max={format(new Date(), 'yyyy-MM-dd')}
+               onChange={(e) => setSelectedDate(e.target.value)}
+             />
+          </div>
+        )}
       </div>
 
       {/* Search Bar */}
@@ -221,7 +256,7 @@ export default function LeadDashboard({ userId, onMarkVisited, onRequestDeleteLe
                         <span className="flex items-center gap-1"><Phone size={12} /> {lead.phone}</span>
                         <span className="w-1 h-1 bg-slate-300 rounded-full"></span>
                         <span className="flex items-center gap-1 font-bold text-brand-primary">
-                          <Calendar size={12} /> {format(apptDate, 'MMM dd, yyyy')}
+                          <Calendar size={12} /> {safeFormat(apptDate, 'MMM dd, yyyy')}
                         </span>
                       </div>
                       
@@ -292,7 +327,7 @@ export default function LeadDashboard({ userId, onMarkVisited, onRequestDeleteLe
                             <button
                               onClick={(e) => {
                                 e.stopPropagation();
-                                const dateStr = format(apptDate, 'dd MMM (EEEE)');
+                                const dateStr = safeFormat(apptDate, 'dd MMM (EEEE)');
                                 const message = `Hi ${lead.name}! Just a quick reminder from Alesta Wellness about your scheduled visit on ${dateStr}. Please let us know if you have any questions!`;
                                 const encodedMsg = encodeURIComponent(message);
                                 const phone = lead.phone.replace(/\D/g, '');

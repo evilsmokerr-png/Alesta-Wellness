@@ -5,7 +5,8 @@ import { X, Save, User, Phone, Tag, MessageSquare, Calendar, RefreshCw, Search, 
 import { motion, AnimatePresence } from 'motion/react';
 import { Lead, Client } from '../types';
 import { handleFirestoreError } from '../lib/errorHandlers';
-import { addDays, format } from 'date-fns';
+import { addDays, format, parse } from 'date-fns';
+import { safeFormat } from '../lib/dateUtils';
 
 interface LeadFormProps {
   userId: string;
@@ -27,6 +28,7 @@ export default function LeadForm({ userId, lead, onClose, onSaved, defaultType }
     notes: lead?.notes || '',
     doctorName: lead?.doctorName || '',
     upcomingTreatment: lead?.upcomingTreatment || '',
+    logDate: lead?.logDate ? safeFormat(lead.logDate, 'yyyy-MM-dd') : format(new Date(), 'yyyy-MM-dd'),
   });
   
   const [loading, setLoading] = useState(false);
@@ -43,15 +45,27 @@ export default function LeadForm({ userId, lead, onClose, onSaved, defaultType }
     const delayDebounceFn = setTimeout(async () => {
       setSearching(true);
       try {
-        const q = query(
-          collection(db, 'clients'),
-          where('ownerId', '==', userId),
-          where('searchName', '>=', clientSearch.toLowerCase()),
-          where('searchName', '<=', clientSearch.toLowerCase() + '\uf8ff'),
-          limit(5)
-        );
+        const isPhone = /^\d+$/.test(clientSearch);
+        let q;
+        if (isPhone) {
+          q = query(
+            collection(db, 'clients'),
+            where('ownerId', '==', userId),
+            where('phone', '>=', clientSearch),
+            where('phone', '<=', clientSearch + '\uf8ff'),
+            limit(5)
+          );
+        } else {
+          q = query(
+            collection(db, 'clients'),
+            where('ownerId', '==', userId),
+            where('searchName', '>=', clientSearch.toLowerCase()),
+            where('searchName', '<=', clientSearch.toLowerCase() + '\uf8ff'),
+            limit(5)
+          );
+        }
         const snapshot = await getDocs(q);
-        setSearchResults(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Client)));
+        setSearchResults(snapshot.docs.map(doc => ({ id: doc.id, ...(doc.data() as object) } as Client)));
       } catch (error) {
         console.error("Search error:", error);
       } finally {
@@ -85,7 +99,7 @@ export default function LeadForm({ userId, lead, onClose, onSaved, defaultType }
 
     setLoading(true);
     try {
-      const appointmentDate = addDays(new Date(), formData.appointmentInDays);
+      const appointmentDate = addDays(new Date(formData.logDate || format(new Date(), 'yyyy-MM-dd')), formData.appointmentInDays);
       
       const leadData: Lead = {
         name: formData.name.trim(),
@@ -94,6 +108,7 @@ export default function LeadForm({ userId, lead, onClose, onSaved, defaultType }
         concern: formData.concern.trim(),
         status: formData.status as any,
         appointmentDate: Timestamp.fromDate(appointmentDate),
+        logDate: Timestamp.fromDate(parse(formData.logDate || format(new Date(), 'yyyy-MM-dd'), 'yyyy-MM-dd', new Date())),
         notes: formData.notes.trim(),
         ownerId: userId,
         updatedAt: serverTimestamp(),
@@ -243,22 +258,61 @@ export default function LeadForm({ userId, lead, onClose, onSaved, defaultType }
                   <Phone className="absolute left-3 top-1/2 -translate-y-1/2 text-brand-muted" size={16} />
                 </div>
               </div>
+
+              <div className="space-y-1.5 col-span-full">
+                <label className="text-[10px] font-bold uppercase tracking-widest text-brand-muted ml-1">Date of Call</label>
+                <div className="relative">
+                  <input
+                    type="date"
+                    className="w-full pl-10 pr-4 py-3 bg-white border border-brand-border rounded-xl focus:ring-2 focus:ring-brand-primary/10 focus:border-brand-primary transition-all outline-none text-base sm:text-sm text-brand-secondary font-bold"
+                    value={formData.logDate}
+                    max={format(new Date(), 'yyyy-MM-dd')}
+                    onChange={(e) => setFormData({ ...formData, logDate: e.target.value })}
+                  />
+                  <Calendar className="absolute left-3 top-1/2 -translate-y-1/2 text-brand-muted" size={16} />
+                </div>
+              </div>
             </div>
 
             {entryType === 'existing' && (
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                <div className="space-y-1.5">
-                  <label className="text-[10px] font-bold uppercase tracking-widest text-brand-muted ml-1">Consulting Doctor</label>
-                  <select
-                    className="w-full px-4 py-3 bg-white border border-brand-border rounded-xl focus:ring-2 focus:ring-brand-primary/10 focus:border-brand-primary transition-all outline-none text-base sm:text-sm text-brand-secondary appearance-none font-bold"
-                    value={formData.doctorName}
-                    onChange={(e) => setFormData({ ...formData, doctorName: e.target.value })}
-                  >
-                    <option value="">Select Doctor</option>
-                    <option value="Dr. Sweta">Dr. Sweta</option>
-                    <option value="Dr. Debahuti Pattnaik">Dr. Debahuti Pattnaik</option>
-                    <option value="Manoranjan">Manoranjan</option>
-                  </select>
+                <div className="space-y-1.5 col-span-full">
+                  <label className="text-[10px] font-bold uppercase tracking-widest text-brand-muted ml-1">Assign Doctor / Staff (Multiple allowed)</label>
+                  <div className="flex flex-wrap gap-2">
+                    {[
+                      'Dr. Debahuti Pattnaik', 
+                      'Dr. Sweta Sucharita', 
+                      'Dr. Manoranjan',
+                      'Amisha',
+                      'Subhalaxmi',
+                      'Namita'
+                    ].map((doc) => {
+                      const selectedArr = formData.doctorName ? formData.doctorName.split(', ') : [];
+                      const isSelected = selectedArr.includes(doc);
+                      return (
+                        <button
+                          key={doc}
+                          type="button"
+                          onClick={() => {
+                            let newArr;
+                            if (isSelected) {
+                              newArr = selectedArr.filter(s => s !== doc);
+                            } else {
+                              newArr = [...selectedArr, doc];
+                            }
+                            setFormData({ ...formData, doctorName: newArr.join(', ') });
+                          }}
+                          className={`px-3 py-2 rounded-xl text-[10px] font-bold transition-all border ${
+                            isSelected 
+                              ? 'bg-brand-primary text-white border-brand-primary shadow-sm shadow-brand-primary/20' 
+                              : 'bg-white text-brand-muted border-brand-border hover:border-brand-primary/30'
+                          }`}
+                        >
+                          {doc.includes('.') ? doc.split('. ')[1].split(' ')[0] : doc}
+                        </button>
+                      );
+                    })}
+                  </div>
                 </div>
                 <div className="space-y-1.5">
                   <label className="text-[10px] font-bold uppercase tracking-widest text-brand-muted ml-1">Upcoming Treatment</label>
@@ -273,35 +327,37 @@ export default function LeadForm({ userId, lead, onClose, onSaved, defaultType }
               </div>
             )}
 
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-              <div className="space-y-1.5">
-                <label className="text-[10px] font-bold uppercase tracking-widest text-brand-muted ml-1">Source</label>
-                <div className="relative">
-                  <input
-                    type="text"
-                    placeholder="Source"
-                    className="w-full pl-10 pr-4 py-3 bg-white border border-brand-border rounded-xl focus:ring-2 focus:ring-brand-primary/10 focus:border-brand-primary transition-all outline-none text-base sm:text-sm text-brand-secondary"
-                    value={formData.source}
-                    onChange={(e) => setFormData({ ...formData, source: e.target.value })}
-                  />
-                  <Tag className="absolute left-3 top-1/2 -translate-y-1/2 text-brand-muted" size={16} />
+            {entryType === 'new' && (
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <div className="space-y-1.5">
+                  <label className="text-[10px] font-bold uppercase tracking-widest text-brand-muted ml-1">Source</label>
+                  <div className="relative">
+                    <input
+                      type="text"
+                      placeholder="Source"
+                      className="w-full pl-10 pr-4 py-3 bg-white border border-brand-border rounded-xl focus:ring-2 focus:ring-brand-primary/10 focus:border-brand-primary transition-all outline-none text-base sm:text-sm text-brand-secondary"
+                      value={formData.source}
+                      onChange={(e) => setFormData({ ...formData, source: e.target.value })}
+                    />
+                    <Tag className="absolute left-3 top-1/2 -translate-y-1/2 text-brand-muted" size={16} />
+                  </div>
                 </div>
-              </div>
 
-              <div className="space-y-1.5">
-                <label className="text-[10px] font-bold uppercase tracking-widest text-brand-muted ml-1">Concerns / Context</label>
-                <div className="relative">
-                  <input
-                    type="text"
-                    placeholder="Nature of inquiry"
-                    className="w-full pl-10 pr-4 py-3 bg-white border border-brand-border rounded-xl focus:ring-2 focus:ring-brand-primary/10 focus:border-brand-primary transition-all outline-none text-base sm:text-sm text-brand-secondary"
-                    value={formData.concern}
-                    onChange={(e) => setFormData({ ...formData, concern: e.target.value })}
-                  />
-                  <MessageSquare className="absolute left-3 top-1/2 -translate-y-1/2 text-brand-muted" size={16} />
+                <div className="space-y-1.5">
+                  <label className="text-[10px] font-bold uppercase tracking-widest text-brand-muted ml-1">Concerns / Context</label>
+                  <div className="relative">
+                    <input
+                      type="text"
+                      placeholder="Nature of inquiry"
+                      className="w-full pl-10 pr-4 py-3 bg-white border border-brand-border rounded-xl focus:ring-2 focus:ring-brand-primary/10 focus:border-brand-primary transition-all outline-none text-base sm:text-sm text-brand-secondary"
+                      value={formData.concern}
+                      onChange={(e) => setFormData({ ...formData, concern: e.target.value })}
+                    />
+                    <MessageSquare className="absolute left-3 top-1/2 -translate-y-1/2 text-brand-muted" size={16} />
+                  </div>
                 </div>
               </div>
-            </div>
+            )}
 
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <div className="space-y-1.5">

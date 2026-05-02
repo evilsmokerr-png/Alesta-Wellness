@@ -17,16 +17,24 @@ export default function PaymentFinalizationModal({ treatment, clientName, onClos
   const [error, setError] = useState<string | null>(null);
   
   const [services, setServices] = useState<any[]>(treatment.services || []);
+  const [products, setProducts] = useState<any[]>(treatment.products || []);
   const [splitPayments, setSplitPayments] = useState<{method: 'Cash' | 'PhonePe' | 'POS' | 'POS QR Code', amount: number}[]>(
     treatment.splitPayments || []
   );
   
   // Local state for adding a service if missed
-  const [extraService, setExtraService] = useState({ name: '', mrp: 0, discount: 0 });
+  const [extraService, setExtraService] = useState({ name: '', mrp: 0, discount: 0, discountType: 'percentage' });
 
   const calculateTotal = () => {
-    const servicesTotal = services.reduce((acc, s) => acc + (s.mrp || 0) - (s.discount || 0), 0);
-    const productsTotal = (treatment.products || []).reduce((acc: number, p: any) => acc + ((p.mrp || 0) * (p.qty || 1)) - (p.discount || 0), 0);
+    const servicesTotal = services.reduce((acc, s) => {
+      const disc = s.discountType === 'percentage' ? ((s.mrp || 0) * (s.discount || 0) / 100) : (s.discount || 0);
+      return acc + (s.mrp || 0) - disc;
+    }, 0);
+    const productsTotal = products.reduce((acc: number, p: any) => {
+      const basePrice = (p.mrp || 0) * (p.qty || 1);
+      const disc = p.discountType === 'percentage' ? (basePrice * (p.discount || 0) / 100) : (p.discount || 0);
+      return acc + basePrice - disc;
+    }, 0);
     return servicesTotal + productsTotal;
   };
 
@@ -50,6 +58,7 @@ export default function PaymentFinalizationModal({ treatment, clientName, onClos
       
       await updateDoc(treatmentRef, {
         services: services,
+        products: products,
         splitPayments: splitPayments,
         totalAmount: totalAmount,
         paidAmount: totalPaid,
@@ -106,11 +115,11 @@ export default function PaymentFinalizationModal({ treatment, clientName, onClos
                     <div className="flex-1 text-[11px] font-bold text-brand-secondary flex items-center px-1">
                       {s.name}
                     </div>
-                    <div className="w-24">
+                    <div className="flex gap-1 h-8">
                        <input 
                          type="number"
                          placeholder="MRP"
-                         className="w-full px-2 py-1 bg-white border border-brand-border rounded-lg text-xs font-mono outline-none"
+                         className="w-24 px-2 bg-white border border-brand-border rounded-lg text-xs font-mono outline-none"
                          value={s.mrp}
                          onChange={(e) => {
                            const next = [...services];
@@ -118,34 +127,90 @@ export default function PaymentFinalizationModal({ treatment, clientName, onClos
                            setServices(next);
                          }}
                        />
-                    </div>
-                    <div className="w-24">
-                       <input 
-                         type="number"
-                         placeholder="Disc"
-                         className="w-full px-2 py-1 bg-white border border-brand-border rounded-lg text-xs font-mono outline-none"
-                         value={s.discount}
-                         onChange={(e) => {
-                           const next = [...services];
-                           next[idx].discount = parseFloat(e.target.value) || 0;
-                           setServices(next);
-                         }}
-                       />
+                       <div className="flex gap-1 bg-white border border-brand-border rounded-lg px-2 items-center">
+                         <select 
+                           className="text-[10px] bg-transparent outline-none font-bold cursor-pointer"
+                           value={s.discountType || 'percentage'}
+                           onChange={(e) => {
+                             const next = [...services];
+                             next[idx].discountType = e.target.value;
+                             setServices(next);
+                           }}
+                         >
+                           <option value="percentage">%</option>
+                           <option value="fixed">₹</option>
+                         </select>
+                         <input 
+                           type="number"
+                           placeholder="0"
+                           className="w-16 py-1 text-xs font-mono outline-none text-right"
+                           value={s.discount}
+                           onChange={(e) => {
+                             const next = [...services];
+                             next[idx].discount = parseFloat(e.target.value) || 0;
+                             setServices(next);
+                           }}
+                         />
+                       </div>
                     </div>
                   </div>
                 ))}
              </div>
           </div>
 
-          {/* Combined Inventory/Product View (Read Only here for simplicity, or editable) */}
-          {treatment.products && treatment.products.length > 0 && (
-             <div className="space-y-2">
+          {/* Inventory/Product View */}
+          {products.length > 0 && (
+             <div className="space-y-3">
                 <label className="text-[10px] font-bold text-brand-muted uppercase tracking-widest">Inventory Used</label>
-                <div className="space-y-1">
-                  {treatment.products.map((p: any, idx: number) => (
-                    <div key={idx} className="flex justify-between items-center text-[10px] text-brand-secondary font-medium px-2 py-1.5 bg-slate-50/50 rounded-lg">
-                      <span>{p.name} (x{p.qty})</span>
-                      <span className="font-bold">₹{((p.mrp * p.qty) - (p.discount || 0)).toFixed(2)}</span>
+                <div className="space-y-2">
+                  {products.map((p, idx) => (
+                    <div key={idx} className="bg-slate-50 p-2 rounded-xl border border-brand-border space-y-2">
+                      <div className="text-[11px] font-bold text-brand-secondary px-1 uppercase tracking-tight">
+                        {p.name} (x{p.qty})
+                      </div>
+                      <div className="flex gap-2 h-8">
+                        <div className="flex-1 flex gap-1">
+                          <input 
+                            type="number"
+                            placeholder="MRP"
+                            className="flex-1 px-2 bg-white border border-brand-border rounded-lg text-xs font-mono outline-none"
+                            value={p.mrp}
+                            onChange={(e) => {
+                              const next = [...products];
+                              next[idx].mrp = parseFloat(e.target.value) || 0;
+                              setProducts(next);
+                            }}
+                          />
+                          <div className="flex gap-1 bg-white border border-brand-border rounded-lg px-2 items-center">
+                            <select 
+                              className="text-[10px] bg-transparent outline-none font-bold cursor-pointer"
+                              value={p.discountType || 'percentage'}
+                              onChange={(e) => {
+                                const next = [...products];
+                                next[idx].discountType = e.target.value;
+                                setProducts(next);
+                              }}
+                            >
+                              <option value="percentage">%</option>
+                              <option value="fixed">₹</option>
+                            </select>
+                            <input 
+                              type="number"
+                              placeholder="0"
+                              className="w-16 py-1 text-xs font-mono outline-none text-right"
+                              value={p.discount}
+                              onChange={(e) => {
+                                const next = [...products];
+                                next[idx].discount = parseFloat(e.target.value) || 0;
+                                setProducts(next);
+                              }}
+                            />
+                          </div>
+                        </div>
+                        <div className="w-24 bg-white border border-brand-border rounded-lg flex items-center justify-center font-mono text-[10px] font-black text-brand-secondary">
+                          ₹{((p.mrp * p.qty) - (p.discountType === 'percentage' ? ((p.mrp * p.qty) * p.discount / 100) : p.discount)).toFixed(0)}
+                        </div>
+                      </div>
                     </div>
                   ))}
                 </div>
